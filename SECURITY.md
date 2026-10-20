@@ -1,8 +1,8 @@
 # Security policy
 
 Please report suspected vulnerabilities privately through this repository's
-**Security and quality → Report a vulnerability** form. The repository owner
-must enable GitHub Private Vulnerability Reporting before public issue intake.
+[Report a vulnerability](https://github.com/nasoltstudios/nasolt-vault/security/advisories/new)
+form. GitHub Private Vulnerability Reporting was confirmed enabled on 2026-10-21.
 Do not post exploit details in public issues or pull requests.
 
 Include the affected source revision, steps to reproduce, impact, and a minimal

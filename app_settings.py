@@ -15,6 +15,11 @@ from paths import data_dir
 DEFAULTS: Dict[str, Any] = {
     "export_dir": "",          # "" = use the default ~/Documents/NasoltVault
     "autolock_minutes": 15,
+    "summon_shortcut": "ctrl+alt+n",
+    "summon_timeout_seconds": 30,
+    "start_with_windows": True,
+    "close_to_tray": True,
+    "cold_start_shortcuts": False,
 }
 
 
@@ -28,7 +33,8 @@ def load_settings() -> Dict[str, Any]:
         with open(settings_file(), "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            merged.update({key: value for key, value in data.items() if key != "theme"})
+            merged.update({key: value for key, value in data.items()
+                           if key not in ("theme", "voicekey_shortcut")})
     except (OSError, ValueError):
         pass
     return merged
@@ -39,7 +45,8 @@ def save_settings(settings: Dict[str, Any]) -> None:
         os.makedirs(os.path.dirname(settings_file()), exist_ok=True)
         tmp = settings_file() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=2)
+            json.dump({key: value for key, value in settings.items()
+                       if key != "voicekey_shortcut"}, f, indent=2)
         os.replace(tmp, settings_file())
     except OSError:
         pass  # preferences are best-effort; never crash the app over them

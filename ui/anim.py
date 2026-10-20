@@ -95,6 +95,17 @@ def cancel_owned_after_jobs(widget) -> None:
         pass
 
 
+def cancel_tree_after_jobs(widget) -> None:
+    """Cancel callbacks owned by a page and its controls before removing its Tk tree."""
+    try:
+        children = widget.winfo_children()
+    except tkinter.TclError:
+        children = ()
+    for child in children:
+        cancel_tree_after_jobs(child)
+    cancel_owned_after_jobs(widget)
+
+
 def tween_color(widget, prop: str, a: str, b: str, duration_ms: int = 140, final=None, key: Optional[str] = None) -> None:
     """Animate widget.configure(prop=colour) from hex a to hex b, then set `final` (e.g. the adaptive tuple)."""
     def step(t: float) -> None:

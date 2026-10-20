@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import customtkinter as ctk
 
 from ui import theme as T
-from ui.anim import cancel_owned_after_jobs
+from ui.anim import cancel_tree_after_jobs
 from ui.widgets import Btn, Field, IconBtn, divider, titlebar
 
 
@@ -109,7 +109,7 @@ class Modal(ctk.CTkToplevel):
         # CustomTkinter also schedules a delayed Windows icon callback on each
         # toplevel. Cancel this dialog's callbacks before Tk deletes its Tcl
         # commands; otherwise a quick close can emit a background Tcl error.
-        cancel_owned_after_jobs(self)
+        cancel_tree_after_jobs(self)
         super().destroy()
 
     def run(self):
@@ -140,11 +140,10 @@ class Modal(ctk.CTkToplevel):
 
 
 # ------------------------------------------------------------------ helpers
-def _footer(dlg: Modal, buttons: list) -> None:
+def _footer(dlg: Modal) -> ctk.CTkFrame:
     row = ctk.CTkFrame(dlg.body, fg_color="transparent")
     row.pack(side="bottom", fill="x", padx=24, pady=(0, 20))
-    for b in buttons:
-        b.pack(side="right", padx=(10, 0))
+    return row
 
 
 def confirm(parent, title: str, message: str, confirm_text: str = "Confirm", danger: bool = False,
@@ -152,10 +151,12 @@ def confirm(parent, title: str, message: str, confirm_text: str = "Confirm", dan
     dlg = Modal(parent, title, 440, 226, default_action=None)
     ctk.CTkLabel(dlg.body, text=message, font=T.font(13), text_color=T.TEXT_MUTED, justify="left", anchor="nw",
                  wraplength=390).pack(fill="x", padx=24, pady=(20, 0))
-    ok = Btn(dlg.body, confirm_text, "danger" if danger else "primary", width=112,
+    footer = _footer(dlg)
+    ok = Btn(footer, confirm_text, "danger" if danger else "primary", width=112,
              command=lambda: dlg.close(True))
-    cancel = Btn(dlg.body, cancel_text, "outline", width=96, command=dlg.cancel)
-    _footer(dlg, [ok, cancel])
+    cancel = Btn(footer, cancel_text, "outline", width=96, command=dlg.cancel)
+    cancel.pack(side="right")
+    ok.pack(side="right", padx=(0, 10))
     dlg._default_action = lambda: dlg.close(True)
     return bool(dlg.run())
 
@@ -164,9 +165,9 @@ def alert(parent, title: str, message: str, button: str = "OK") -> None:
     dlg = Modal(parent, title, 460, 250, default_action=None)
     ctk.CTkLabel(dlg.body, text=message, font=T.font(13), text_color=T.TEXT_MUTED, justify="left", anchor="nw",
                  wraplength=410).pack(fill="x", padx=24, pady=(20, 0))
-    b = Btn(dlg.body, button, "primary", width=96, command=dlg.cancel)
-    b.pack_forget()
-    _footer(dlg, [b])
+    footer = _footer(dlg)
+    b = Btn(footer, button, "primary", width=96, command=dlg.cancel)
+    b.pack(side="right")
     dlg._default_action = dlg.cancel
     dlg.run()
 
@@ -191,10 +192,11 @@ def prompt(parent, title: str, label: str, initial: str = "", placeholder: str =
             return
         dlg.close(value)
 
-    ok = Btn(dlg.body, confirm_text, "primary", width=104, command=submit)
-    cancel = Btn(dlg.body, "Cancel", "outline", width=96, command=dlg.cancel)
-    ok.pack_forget(); cancel.pack_forget()
-    _footer(dlg, [ok, cancel])
+    footer = _footer(dlg)
+    ok = Btn(footer, confirm_text, "primary", width=104, command=submit)
+    cancel = Btn(footer, "Cancel", "outline", width=96, command=dlg.cancel)
+    cancel.pack(side="right")
+    ok.pack(side="right", padx=(0, 10))
     field.bind_return(submit)
     field.bind_key(lambda e: (err.configure(text=""), field.set_error(False)) if e.keysym not in ("Return",) else None)
     dlg._default_action = submit
@@ -239,12 +241,41 @@ def export_password_prompt(parent, *, confirm: bool) -> Optional[str]:
         else:
             dlg.close(value)
 
-    ok = Btn(dlg.body, "Encrypt" if confirm else "Decrypt", "primary", width=100, command=submit)
-    cancel = Btn(dlg.body, "Cancel", "outline", width=96, command=dlg.cancel)
-    _footer(dlg, [ok, cancel])
+    footer = _footer(dlg)
+    ok = Btn(footer, "Encrypt" if confirm else "Decrypt", "primary", width=100, command=submit)
+    cancel = Btn(footer, "Cancel", "outline", width=96, command=dlg.cancel)
+    cancel.pack(side="right")
+    ok.pack(side="right", padx=(0, 10))
     field.bind_return(submit)
     if again is not None:
         again.bind_return(submit)
+    dlg._default_action = submit
+    dlg.present()
+    dlg.after(80, field.focus)
+    dlg.wait_window(dlg)
+    return dlg.result
+
+
+def master_password_prompt(parent, title: str = "Confirm master password") -> Optional[str]:
+    """Collect a master password for an explicit settings action, without logging it."""
+    dlg = Modal(parent, title, 440, 245)
+    ctk.CTkLabel(dlg.body, text="Enter your current master password.", font=T.font(12),
+                 text_color=T.TEXT, anchor="w").pack(fill="x", padx=24, pady=(18, 7))
+    field = Field(dlg.body, password=True)
+    field.pack(fill="x", padx=24)
+
+    def submit() -> None:
+        value = field.get()
+        field.set("")
+        if value:
+            dlg.close(value)
+
+    footer = _footer(dlg)
+    cancel = Btn(footer, "Cancel", "outline", width=96, command=dlg.cancel)
+    ok = Btn(footer, "Continue", "primary", width=104, command=submit)
+    cancel.pack(side="right")
+    ok.pack(side="right", padx=(0, 10))
+    field.bind_return(submit)
     dlg._default_action = submit
     dlg.present()
     dlg.after(80, field.focus)

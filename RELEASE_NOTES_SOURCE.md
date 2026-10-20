@@ -1,22 +1,17 @@
-# Source release notes — prepared, unpublished
+# Source update notes — prepared, unpublished
 
-Prepared for a source-only publication. No tag, binary, installer, or public repository has been created.
+Proposed commit: `feat: add Vault Summon and Windows Hello quick access`
 
-## Highlights
+This update is for the existing public source repository. No commit, push, tag, GitHub release, executable, or installer is part of this preparation.
 
-- Lockout Lab maps accounts, devices, and recovery methods with combined requirements and alternative routes. It simulates lost phone, inaccessible primary email, and lost computer scenarios entirely offline.
-- Recovery results show potentially blocked accounts, missing information, circular dependencies, and practical preparation steps. A user-verified marker records a user's own test; it is not provider verification.
-- Lockout Lab metadata is authenticated and encrypted in a separate file tied to the unlocked vault session. The existing vault envelope and master-password derivation are unchanged.
-- Import / Export now defaults to password-protected `.nve` files. Legacy CSV and JSON are still supported with an explicit plaintext warning. The `.nve` format is a separate entry export and does not alter `vault.enc`.
-- Account names show locally drawn, offline monogram icons when recognized; new-entry icon preview and generated fallback icons remain available without unlicensed brand artwork.
-- Installer migration now stages and verifies ciphertext, retains the portable source, and refuses destination conflicts. The uninstaller no longer deletes user data.
-- Unverified brand artwork and the prior app JPG have been removed. A project-generated app icon pack and local account icon fallback remain; Lucide/Feather notices are included.
+## Changes
 
-## Known limitations
+- **Vault Summon:** Ctrl+Alt+N opens a compact account search after fresh master-password authentication. For an already-unlocked vault, optional Windows Hello can reauthenticate the current session. A fully locked vault still requires the master password. Passwords are copied on request, never displayed in the popup.
+- **Background operation:** optional per-user Windows startup defaults on and begins locked in the tray. The tray offers Open Vault, Lock Vault, Settings, and Exit. Closing the window locks the vault and keeps the app in the tray by default. An optional Start Menu shortcut can request Ctrl+Alt+N cold start where Windows Shell delivers it.
+- **Session safeguards:** quick access is revoked on lock, Windows desktop change, session-file mismatch, and exit. Startup registry values and Start Menu links are removed only when they point to the current installation.
+- **VoiceKey removal:** the experimental preview, Ctrl+Alt+V registration, UI, and microphone path are gone. Legacy settings are ignored and app-owned legacy shortcuts are cleaned up conservatively.
+- **Presentation and diagnostics:** refreshed Windows XP-style login, visible modal action buttons, and expanded headless import checks.
 
-- The NSIS installer has not passed an isolated Windows install/upgrade/uninstall test and must not be distributed yet.
-- The final one-file executable compiled but Windows Application Control blocked its self-test launch; it is not approved for distribution.
-- The project source is MIT licensed by Nasolt Studios. The owner has not published a repository, tag, or GitHub release yet.
-- Lockout Lab outcomes are models, not live recovery checks. The sidecar is not included in entry exports.
-- Direct runtime dependency versions are pinned; transitive package wheels are not hash locked, and binary redistribution notices are incomplete.
-- Actual historical personal vaults were not tested; compatibility tests use synthetic v1 fixtures.
+## Verification and limits
+
+On Windows 11, 118 synthetic source tests ran: 116 passed, 0 failed, 2 skipped. Compileall, dependency integrity, headless self-test, and Git whitespace checks passed. Native Windows Hello gestures and a full sign-in/restart sequence were not rerun in this audit; the owner previously reported seven manual Phase A.4 smoke checks as passing. The executable and NSIS installer remain unverified for distribution. No vault-file format migration is introduced.

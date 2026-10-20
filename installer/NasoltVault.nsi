@@ -144,6 +144,14 @@ Section "Uninstall"
   IfFileExists "$INSTDIR\installed.flag" +3 0
     MessageBox MB_OK|MB_ICONSTOP "The installation marker is missing. Uninstallation stopped to avoid deleting files from an unexpected folder." /SD IDOK
     Abort
+  ; The app verifies its Run command and shortcut targets before removal.
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --unregister-startup' $0
+  IfErrors shortcut_cleanup_failed
+  StrCmp $0 0 shortcut_cleanup_done shortcut_cleanup_failed
+  shortcut_cleanup_failed:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Startup shortcuts could not be verified or removed. Check the Nasolt Vault Start Menu folder and remove only links you recognize." /SD IDOK
+  shortcut_cleanup_done:
   Delete "$INSTDIR\${EXE}"
   Delete "$INSTDIR\installed.flag"
   Delete "$INSTDIR\Uninstall.exe"

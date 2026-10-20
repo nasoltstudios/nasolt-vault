@@ -14,7 +14,7 @@ from generators import estimate_strength
 from ui import theme as T
 from ui.anim import animate, cancel_owned_after_jobs
 from ui.modal import alert, confirm
-from ui.widgets import Btn, Field, StrengthMeter, divider, groupbox, titlebar
+from ui.widgets import Btn, Field, StrengthMeter, divider, titlebar
 
 log = logging.getLogger("nasolt.login")
 MIN_LENGTH = 8
@@ -37,37 +37,54 @@ class LoginView(ctk.CTkFrame):
     def _build(self) -> None:
         body = ctk.CTkFrame(self, fg_color=T.BG, corner_radius=0)
         body.pack(fill="both", expand=True)
-        side = ctk.CTkFrame(body, width=200, fg_color=T.SIDEBAR, corner_radius=0)
+        side = ctk.CTkFrame(body, width=238, fg_color=T.SIDEBAR, corner_radius=0)
         side.pack(side="left", fill="y")
         side.pack_propagate(False)
-        divider(body, vertical=True).pack(side="left", fill="y")
-        right = ctk.CTkFrame(body, fg_color=T.BG, corner_radius=0)
-        right.pack(side="left", fill="both", expand=True)
-        brand = ctk.CTkFrame(right, fg_color="transparent")
-        brand.pack(anchor="nw", padx=28, pady=(18, 0))
-        ctk.CTkLabel(brand, text="", image=icons.app_logo(34), width=34,
-                     height=34).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(brand, text="Nasolt Vault", font=T.font(17, "bold"),
-                     text_color=T.TEXT).pack(side="left")
+        ctk.CTkFrame(side, height=4, fg_color=T.ACCENT_LINE, corner_radius=0).pack(fill="x")
+        ctk.CTkLabel(side, text="VAULT ACCESS", font=T.font(11, "bold"),
+                     text_color=T.BRAND, anchor="w").pack(fill="x", padx=22, pady=(30, 2))
+        self.side_state = ctk.CTkLabel(side, text="", font=T.font(22, "bold"),
+                                       text_color=T.TEXT, anchor="w")
+        self.side_state.pack(fill="x", padx=22)
+        ctk.CTkLabel(side, text="Choose an action below to continue.",
+                     font=T.font(11), text_color=T.TEXT_MUTED,
+                     anchor="w", wraplength=190, justify="left").pack(fill="x", padx=22, pady=(6, 22))
 
         tasks = ctk.CTkFrame(side, fg_color=T.SURFACE, border_width=1,
-                             border_color=T.BORDER_STRONG, corner_radius=2)
-        tasks.pack(fill="x", padx=10, pady=(18, 0))
-        task_head = titlebar(tasks, 34)
+                             border_color=T.BORDER_STRONG, corner_radius=1)
+        tasks.pack(fill="x", padx=14)
+        task_head = titlebar(tasks, 32)
         task_head.pack(fill="x")
         ctk.CTkLabel(task_head, text="Vault Tasks", font=T.font(12, "bold"),
                      text_color=T.TITLEBAR_TEXT, anchor="w").pack(fill="x", padx=12)
-        self.btn_unlock = Btn(tasks, "Unlock Vault", "primary", width=164, height=28,
+        self.btn_unlock = Btn(tasks, "Unlock Vault", "primary", width=188, height=31,
                               anchor="w", command=lambda: self._set_mode("unlock"))
-        self.btn_unlock.pack(fill="x", padx=8, pady=(10, 4))
-        self.btn_create = Btn(tasks, "Create New Vault", "secondary", width=164,
-                              height=28, anchor="w", command=self._choose_create)
-        self.btn_create.pack(fill="x", padx=8, pady=(4, 10))
-        Btn(side, "Forgot your password?", "link", width=176, height=28,
-            size=12, anchor="w", command=self._forgot).pack(anchor="w", padx=14, pady=(12, 0))
+        self.btn_unlock.pack(fill="x", padx=10, pady=(13, 5))
+        self.btn_create = Btn(tasks, "Create New Vault", "secondary", width=188,
+                              height=31, anchor="w", command=self._choose_create)
+        self.btn_create.pack(fill="x", padx=10, pady=(5, 13))
+        Btn(side, "Forgot your password?", "link", width=196, height=28,
+            size=12, anchor="w", command=self._forgot).pack(anchor="w", padx=20, pady=(16, 0))
 
-        form_box, self.form = groupbox(right, "Vault access")
-        form_box.place(relx=0.5, rely=0.5, anchor="center")
+        divider(body, vertical=True).pack(side="left", fill="y")
+        right = ctk.CTkFrame(body, fg_color=T.BG, corner_radius=0)
+        right.pack(side="left", fill="both", expand=True)
+        self.card_shadow = ctk.CTkFrame(right, width=486, height=338,
+                                        fg_color="#c8c5b8", corner_radius=0)
+        self.card_shadow.place(relx=0.5, rely=0.5, anchor="center", x=5, y=5)
+        self.card = ctk.CTkFrame(right, width=486, height=338, fg_color=T.SURFACE,
+                                 border_width=1, border_color=T.BORDER_STRONG, corner_radius=0)
+        self.card.place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkFrame(self.card, height=5, fg_color=T.ACCENT, corner_radius=0).pack(fill="x", padx=1, pady=(1, 0))
+        brand = ctk.CTkFrame(self.card, fg_color="transparent")
+        brand.pack(fill="x", padx=28, pady=(18, 14))
+        ctk.CTkLabel(brand, text="", image=icons.app_logo(32), width=32,
+                     height=32).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(brand, text="Nasolt Vault", font=T.font(16, "bold"),
+                     text_color=T.BRAND, anchor="w").pack(side="left")
+        divider(self.card).pack(fill="x", padx=28)
+        self.form = ctk.CTkFrame(self.card, fg_color="transparent")
+        self.form.pack(fill="both", expand=True, padx=28, pady=(19, 22))
 
     def _style_buttons(self) -> None:
         exists = vault.vault_exists()
@@ -120,41 +137,70 @@ class LoginView(ctk.CTkFrame):
             w.destroy()
         self._style_buttons()
         creating = self.mode == "create"
-        ctk.CTkLabel(self.form, text="Create New Vault" if creating else "Unlock Vault", font=T.font(17, "bold"),
+        self.side_state.configure(text="New vault" if creating else "Vault locked")
+        height = 432 if creating else 338
+        self.card.configure(height=height)
+        self.card_shadow.configure(height=height)
+        ctk.CTkLabel(self.form, text="Create your vault" if creating else "Welcome back", font=T.font(23, "bold"),
                      text_color=T.TEXT, anchor="w").pack(fill="x")
-        ctk.CTkLabel(self.form, text="Set a strong master password to protect your vault." if creating else
-                     "Enter your master password to open your vault.", font=T.font(12), text_color=T.TEXT_MUTED, anchor="w").pack(fill="x", pady=(2, 2))
+        ctk.CTkLabel(self.form, text="Choose a strong master password." if creating else
+                     "Enter your master password to continue.", font=T.font(12),
+                     text_color=T.TEXT_MUTED, anchor="w").pack(fill="x", pady=(4, 12))
 
-        self._label("Master Password", (10, 5))
+        self._label("Master password", (0, 5))
         self.wrap = ctk.CTkFrame(self.form, fg_color="transparent")
         self.wrap.pack(fill="x")
-        self.f_pw = Field(self.wrap, "Enter your master password", password=True, width=400, height=34)
+        self.f_pw = Field(self.wrap, "Enter your master password", password=True, width=420, height=36)
         self.f_pw.pack(fill="x")
         self.f_pw.bind_return(self._submit)
 
         if creating:
-            self._label("Confirm Password")
-            self.f_confirm = Field(self.form, "Re-enter your master password", password=True, width=400, height=34)
+            self._label("Confirm password")
+            self.f_confirm = Field(self.form, "Re-enter your master password", password=True, width=420, height=36)
             self.f_confirm.pack(fill="x")
             self.f_confirm.bind_return(self._submit)
-            self._label("Password Strength", (10, 5))
+            self._label("Password strength", (10, 5))
             self.meter = StrengthMeter(self.form, segments=6, label_width=84)
             self.meter.pack(fill="x")
             self.f_pw.bind_key(self._on_key)
 
-        self.err = ctk.CTkLabel(self.form, text=self._message or "", font=T.font(12), height=18,
-                                text_color=T.TEXT_MUTED if self._message else T.DANGER, anchor="w", wraplength=400, justify="left")
-        self.err.pack(fill="x", pady=(6, 0))
+        self.err = ctk.CTkLabel(self.form, text=self._message or "", font=T.font(12), height=22,
+                                text_color=T.TEXT_MUTED if self._message else T.DANGER,
+                                anchor="w", wraplength=420, justify="left")
+        self.err.pack(fill="x", pady=(8, 0))
         self._message = None
-        self.submit = Btn(self.form, "Create Vault" if creating else "Unlock", "primary", width=140,
+        self.actions = ctk.CTkFrame(self.form, fg_color="transparent")
+        self.actions.pack(fill="x", pady=(7, 0))
+        self.submit = Btn(self.actions, "Create Vault" if creating else "Unlock", "primary", width=140,
                           height=32, command=self._submit)
-        self.submit.pack(anchor="e", pady=(8, 0))
+        self.submit.pack(side="right")
+        self.quick_cancel = None
+        request = self.app.quick_access.request
+        if request is not None and request.state == "pending" and request.await_login:
+            self.show_quick_request()
         def focus_password() -> None:
             self._focus_job = None
             if self.f_pw.winfo_exists():
                 self.f_pw.focus()
 
         self._focus_job = self.after(120, focus_password)
+
+    def show_quick_request(self) -> None:
+        if self.quick_cancel is not None:
+            return
+        request = self.app.quick_access.request
+        destination = "Settings" if request is not None and request.destination == "settings" else "Vault Summon"
+        self.err.configure(text=f"Unlock to open {destination}.", text_color=T.TEXT_MUTED)
+        self.quick_cancel = Btn(self.actions, "Cancel quick access", "secondary", width=150,
+                                height=28, command=self.app.quick_access.cancel_request)
+        self.quick_cancel.pack(side="left")
+
+    def hide_quick_request(self) -> None:
+        if self.quick_cancel is not None:
+            self.quick_cancel.destroy()
+            self.quick_cancel = None
+        if self.err.cget("text") in ("Unlock to open Vault Summon.", "Unlock to open Settings."):
+            self.err.configure(text="")
 
     def destroy(self) -> None:
         cancel_owned_after_jobs(self)
@@ -250,6 +296,7 @@ class LoginView(ctk.CTkFrame):
         if "e" in res:
             e = res["e"]
             if isinstance(e, vault.VaultBusyError):
+                self.app.quick_access.authentication_failed()
                 self._error(str(e))
             elif isinstance(e, (vault.VaultAuthenticationError, vault.VaultFormatError)):
                 message = str(e)
@@ -260,6 +307,7 @@ class LoginView(ctk.CTkFrame):
                 pw = self.f_pw.get()
                 self._bg(lambda: vault.backup_is_valid(pw), lambda check: self._recovery_checked(check, pw, message))
             else:
+                self.app.quick_access.authentication_failed()
                 log.error("unlock failed (%s)", type(e).__name__)
                 self._error("Couldn't open the vault. Keep the encrypted file and check the data folder.")
             return
@@ -269,6 +317,7 @@ class LoginView(ctk.CTkFrame):
     def _recovery_checked(self, check: dict, master_password: str, error_message: str) -> None:
         self._busy_end()
         if check.get("e") is not None or not check.get("v"):
+            self.app.quick_access.authentication_failed()
             self._error(error_message)
             return
         ok = confirm(self.winfo_toplevel(), "Restore verified backup?",
@@ -277,6 +326,7 @@ class LoginView(ctk.CTkFrame):
                      "before any replacement. Continue only if you want to restore this backup.",
                      "Restore backup", danger=True)
         if not ok:
+            self.app.quick_access.authentication_failed()
             self._error(error_message)
             return
         self._busy_start("Restoring")
@@ -285,12 +335,14 @@ class LoginView(ctk.CTkFrame):
     def _recovered(self, res: dict) -> None:
         self._busy_end()
         if "e" in res:
+            self.app.quick_access.authentication_failed()
             self._error("Backup recovery failed; the encrypted files were kept. Close other app instances and try again.")
             return
         entries, groups = res["v"]
         self.app.on_unlocked(entries, groups)
 
     def _created(self, res: dict) -> None:
+        self.app.quick_access.cancel_request()
         self._busy_end()
         if "e" in res:
             log.error("create failed (%s)", type(res["e"]).__name__)

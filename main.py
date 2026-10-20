@@ -24,7 +24,11 @@ import traceback
 import customtkinter as ctk
 
 import clipboard
+import app_settings
 import icons
+from quick_access import QuickAccess
+from windows_startup import cleanup_legacy_voice_link, sync_startup, sync_cold_start_links
+from windows_tray import TrayIcon
 from paths import data_dir, resource_path
 from ui import theme as T
 from ui.anim import animate
@@ -48,7 +52,7 @@ def setup_logging() -> None:
 
 
 class App(ctk.CTk):
-    def __init__(self) -> None:
+    def __init__(self, initial_route: str | None = None, background: bool = False, instance=None) -> None:
         T.apply_mode()
         super().__init__(fg_color=T.BG)
         T.reset_tk_cache()
@@ -57,13 +61,19 @@ class App(ctk.CTk):
         self.title("Nasolt Vault")
         self._set_icon()
         self.session = VaultSession()
+        self.instance = instance
         self.last_activity = time.monotonic()
         self._last_wall = time.time()
         self.shell: Shell | None = None
         self.login: LoginView | None = None
         self.toasts = Toasts(self)
+        self.tray = TrayIcon()
+        self.quick_access = QuickAccess(self)
         self._fullscreen = False
         self._close_wait_job = None
+        self._background_start = background
+        self._tray_deadline = 0.0
+        self._close_tray_job = None
 
         for seq in ("<Motion>", "<Key>", "<Button>", "<MouseWheel>"):
             self.bind(seq, self._touch, add="+")
@@ -75,7 +85,7 @@ class App(ctk.CTk):
         self.bind("<F10>", lambda e: self.shell and self.shell.open_app_menu("File"))
         self.bind("<F11>", self._toggle_fullscreen)
         self.bind("<Escape>", self._exit_fullscreen, add="+")
-        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.protocol("WM_DELETE_WINDOW", self.on_window_close)
         self.report_callback_exception = self._tk_error
 
         self._initializing_window = True
@@ -84,7 +94,13 @@ class App(ctk.CTk):
         # can withdraw the root. Finish it before showing an interactive window.
         self.update()
         self._initializing_window = False
-        self.after(1, self._reveal_initial_window)
+        if background and self.tray.start_async():
+            self._tray_deadline = time.monotonic() + 10
+            self.after(50, self._finish_background_start)
+        else:
+            self.after(1, self._reveal_initial_window)
+        if initial_route == "normal":
+            self.after(1, self.quick_access.request_normal)
 
     def _reveal_initial_window(self) -> None:
         self.state("normal")
@@ -94,6 +110,18 @@ class App(ctk.CTk):
         self.focus_force()
         animate(self, "reveal", 200, lambda t: self._alpha(t))
         self.toasts_raise()
+
+    def _finish_background_start(self) -> None:
+        if not self._background_start:
+            return
+        if self.tray.active:
+            self._background_start = False
+            return
+        if self.tray._ready.is_set() or time.monotonic() >= self._tray_deadline:
+            self._background_start = False
+            self._reveal_initial_window()
+            return
+        self.after(50, self._finish_background_start)
 
     # ------------------------------------------------------------ window helpers
     def _set_icon(self) -> None:
@@ -115,14 +143,14 @@ class App(ctk.CTk):
         so time spent asleep (when a monotonic clock may pause) still counts toward auto-lock."""
         return max(time.monotonic() - self.last_activity, time.time() - self._last_wall, 0.0)
 
-    def _swap(self, build, size, min_size, resizable: bool) -> None:
+    def _swap(self, build, size, min_size, resizable: bool, reveal: bool = True) -> None:
         """Rebuild the window contents off-screen, resize + centre, then fade in."""
         self.withdraw()
         self.toasts.clear()
         if self._fullscreen:
             self.attributes("-fullscreen", False)
             self._fullscreen = False
-        if not self._initializing_window:
+        if not self._initializing_window and reveal:
             self.state("normal")
         for child in self.winfo_children():
             if isinstance(child, (LoginView, Shell)):
@@ -132,10 +160,10 @@ class App(ctk.CTk):
         build()
         self.update_idletasks()
         try:
-            self.attributes("-alpha", 0.0)
+            self.attributes("-alpha", 0.0 if reveal and not self._initializing_window else 1.0)
         except tkinter.TclError:
             pass
-        if not self._initializing_window:
+        if not self._initializing_window and reveal:
             self.deiconify()
             T.style_native_window(self)
             self.lift()
@@ -154,7 +182,9 @@ class App(ctk.CTk):
             it["frame"].tkraise()
 
     # ------------------------------------------------------------ flow
-    def show_login(self, message: str | None = None) -> None:
+    def show_login(self, message: str | None = None, preserve_hidden: bool = False) -> None:
+        self.quick_access.revoke()
+        clipboard.clear_now()
         self.session.close()
         Popup.close_current()
         self.shell = None
@@ -163,9 +193,9 @@ class App(ctk.CTk):
             self.login = LoginView(self, self, message)
             self.login.pack(fill="both", expand=True)
 
-        self._swap(build, LOGIN_SIZE, LOGIN_SIZE, resizable=False)
+        self._swap(build, LOGIN_SIZE, LOGIN_SIZE, resizable=False, reveal=not preserve_hidden)
 
-    def on_unlocked(self, entries, groups) -> None:
+    def on_unlocked(self, entries, groups, reveal: bool = True) -> None:
         self.login = None
         self._touch()
 
@@ -173,7 +203,59 @@ class App(ctk.CTk):
             self.shell = Shell(self, self, self.session, entries, groups)
             self.shell.pack(fill="both", expand=True)
 
-        self._swap(build, MAIN_SIZE, MAIN_MIN, resizable=True)
+        self._swap(build, MAIN_SIZE, MAIN_MIN, resizable=True, reveal=reveal)
+        self.quick_access.on_session_unlocked()
+
+    def open_window(self) -> None:
+        self._background_start = False
+        self.deiconify()
+        self.state("normal")
+        self.lift()
+        self.focus_force()
+
+    def open_settings(self) -> None:
+        self.open_window()
+        if self.shell is not None:
+            self.shell.navigate("settings")
+
+    def lock_from_tray(self) -> None:
+        was_hidden = self.state() == "withdrawn"
+        self.show_login(preserve_hidden=was_hidden)
+
+    def tray_action(self, action: str) -> None:
+        if action == "open":
+            self.open_window()
+        elif action == "lock":
+            self.lock_from_tray()
+        elif action == "settings":
+            if self.session.is_open:
+                self.open_settings()
+            else:
+                self.quick_access.request_normal("settings")
+        elif action == "exit":
+            self.close()
+
+    def on_window_close(self) -> None:
+        self._background_start = False
+        if app_settings.get("close_to_tray", True):
+            self.show_login(preserve_hidden=True)
+            if self.tray.active:
+                return
+            if self.tray.start_async():
+                self._tray_deadline = time.monotonic() + 10
+                if self._close_tray_job is None:
+                    self._close_tray_job = self.after(50, self._finish_close_to_tray)
+                return
+        self.close()
+
+    def _finish_close_to_tray(self) -> None:
+        self._close_tray_job = None
+        if self.tray.active:
+            return
+        if self.tray._ready.is_set() or time.monotonic() >= self._tray_deadline:
+            self.close()
+            return
+        self._close_tray_job = self.after(50, self._finish_close_to_tray)
 
     def _toggle_fullscreen(self, _e=None) -> None:
         if self.shell is None:
@@ -192,8 +274,11 @@ class App(ctk.CTk):
     def close(self) -> None:
         # Unlock/create/recovery runs on a worker. Let it finish its encrypted
         # file operation before releasing the session lock and closing Tk.
+        self.quick_access.cancel_native_authentication()
         worker = getattr(self.login, "_active_worker", None)
-        if worker is not None and worker.is_alive():
+        quick_worker = getattr(self.quick_access, "_auth_worker", None)
+        if ((worker is not None and worker.is_alive()) or
+                (quick_worker is not None and quick_worker.is_alive())):
             if self._close_wait_job is None:
                 self._close_wait_job = self.after(50, self._retry_close)
             return
@@ -208,6 +293,8 @@ class App(ctk.CTk):
             except tkinter.TclError:
                 pass
             clipboard.clear_now()
+            self.quick_access.stop()
+            self.tray.stop()
             self.session.close()
             Modal.close_all()
         finally:
@@ -237,10 +324,28 @@ def _error_location(tb) -> str:
 
 def main() -> int:
     stage = "logging setup"
+    instance = None
     try:
+        if "--unregister-startup" in sys.argv:
+            startup = sync_startup(False)
+            links = sync_cold_start_links(False)
+            return 0 if startup in ("disabled", "isolated test mode") and links in ("disabled", "isolated test mode") else 1
+        if "--voice" in sys.argv:
+            # A shortcut from an older build can invoke this before the updated
+            # app has started. Remove only that verified app-owned link.
+            return 0 if cleanup_legacy_voice_link() in ("removed", "isolated test mode", "Windows only") else 1
+        from instance import InstanceCoordinator
+        instance = InstanceCoordinator()
+        route = "normal" if "--summon" in sys.argv else "open"
+        if not instance.acquire():
+            if "--background" not in sys.argv:
+                instance.send(route)
+            return 0
         setup_logging()
+        sync_startup(bool(app_settings.get("start_with_windows", True)))
         stage = "window initialization"
-        app = App()
+        app = App(initial_route=route if route != "open" else None,
+                  background="--background" in sys.argv or route == "normal", instance=instance)
         stage = "event loop"
         app.mainloop()
         return 0
@@ -253,6 +358,9 @@ def main() -> int:
         except Exception:
             pass
         return 1
+    finally:
+        if instance is not None:
+            instance.close()
 
 
 if __name__ == "__main__":

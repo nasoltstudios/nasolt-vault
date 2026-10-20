@@ -21,7 +21,10 @@ THIRD_PARTY = ["tkinter", "_tkinter", "customtkinter", "darkdetect", "PIL", "PIL
 APP_MODULES = ["paths", "crypto", "vault", "export", "generators", "clipboard", "app_settings", "icons", "ui.theme",
                "ui.anim", "ui.widgets", "ui.modal", "ui.entry_dialog", "ui.vault_page", "ui.groups_page",
                "ui.generator_page", "ui.transfer_page", "ui.settings_page", "ui.login", "ui.shell",
-               "lockout_lab", "ui.lockout_lab_page"]
+               "lockout_lab", "ui.lockout_lab_page", "quick_access", "windows_shortcuts",
+               "ui.summon_popup", "ui.reauth_prompt", "instance",
+               "windows_startup", "windows_tray", "windows_focus", "windows_hello",
+               "hello_enrollment"]
 ASSETS = [("assets", "app.ico"), ("assets", "app.png"),
           ("assets", "app_icons", "nasolt-vault-16.png"), ("assets", "app_icons", "nasolt-vault-512.png"),
           ("assets", "brands.json"), ("assets", "icons", "lock.png"),

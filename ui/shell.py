@@ -114,6 +114,7 @@ class Shell(ctk.CTkFrame):
         self._menu_button(menu, "Tools", [
             {"label": "Password Generator", "icon": "key-round", "command": lambda: self.navigate("generator")},
             {"label": "Lockout Lab", "icon": "shield-check", "command": lambda: self.navigate("lockout_lab")},
+            {"label": "Vault Summon", "icon": "search", "command": self.app.quick_access.request_normal},
         ])
         self.add_entry_button = Btn(menu, "Add Entry", "secondary", icon="plus",
                                     width=112, height=26, command=self.new_entry)
@@ -379,6 +380,8 @@ class Shell(ctk.CTkFrame):
             except Exception:
                 pass
             self._tick_job = None
+        from ui.anim import cancel_tree_after_jobs
+        cancel_tree_after_jobs(self)
         super().destroy()
 
     # ------------------------------------------------------------ shortcuts

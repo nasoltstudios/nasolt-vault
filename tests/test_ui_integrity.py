@@ -88,13 +88,18 @@ class UiIntegrityTests(unittest.TestCase):
         shell.navigate("settings")
         self.assertIs(shell.add_entry_button.master.master, shell)
         seen = {}
+        deadline = time.monotonic() + 5
 
         def inspect_dialog():
+            if not Modal.open_modals and time.monotonic() < deadline:
+                self.app.after(50, inspect_dialog)
+                return
             seen["page"] = shell.current
-            seen["dialog"] = isinstance(Modal.open_modals[-1], EntryDialog)
-            Modal.open_modals[-1].cancel()
+            seen["dialog"] = bool(Modal.open_modals) and isinstance(Modal.open_modals[-1], EntryDialog)
+            if Modal.open_modals:
+                Modal.open_modals[-1].cancel()
 
-        self.app.after(150, inspect_dialog)
+        self.app.after(50, inspect_dialog)
         shell.add_entry_button.invoke()
         self.assertEqual(seen, {"page": "vault", "dialog": True})
 
@@ -287,6 +292,65 @@ class UiIntegrityTests(unittest.TestCase):
         dialog.close()
         self.assertFalse(owned_jobs())
 
+    def test_modal_action_buttons_are_inside_the_visible_dialog(self):
+        from ui.modal import Modal, alert, confirm, export_password_prompt, master_password_prompt, prompt
+        from ui.widgets import Btn
+
+        cases = (
+            (lambda: master_password_prompt(self.app), {"Continue", "Cancel"}),
+            (lambda: confirm(self.app, "Synthetic confirmation", "Synthetic action?"), {"Confirm", "Cancel"}),
+            (lambda: alert(self.app, "Synthetic notice", "Synthetic message"), {"OK"}),
+            (lambda: prompt(self.app, "Synthetic name", "Name"), {"Save", "Cancel"}),
+            (lambda: export_password_prompt(self.app, confirm=True), {"Encrypt", "Cancel"}),
+            (lambda: export_password_prompt(self.app, confirm=False), {"Decrypt", "Cancel"}),
+        )
+        for open_dialog, expected in cases:
+            observed = {}
+
+            def inspect():
+                dialog = Modal.open_modals[-1]
+                dialog.update_idletasks()
+                left, top = dialog.winfo_rootx(), dialog.winfo_rooty()
+                right, bottom = left + dialog.winfo_width(), top + dialog.winfo_height()
+                for button in dialog.body.winfo_children():
+                    for child in button.winfo_children():
+                        if isinstance(child, Btn):
+                            x, y = child.winfo_rootx(), child.winfo_rooty()
+                            observed[child.cget("text")] = (
+                                bool(child.winfo_ismapped()) and left <= x and top <= y and
+                                x + child.winfo_width() <= right and y + child.winfo_height() <= bottom
+                            )
+                dialog.cancel()
+
+            self.app.after(150, inspect)
+            open_dialog()
+            self.assertEqual(set(observed), expected)
+            self.assertTrue(all(observed.values()), observed)
+
+    def test_hello_enrollment_master_prompt_continue_button_submits(self):
+        from ui.modal import Modal, master_password_prompt
+        from ui.widgets import Btn, Field
+
+        observed = {}
+
+        def submit():
+            dialog = Modal.open_modals[-1]
+            field = next(child for child in dialog.body.winfo_children() if isinstance(child, Field))
+            footer = next(child for child in dialog.body.winfo_children()
+                          if any(isinstance(button, Btn) for button in child.winfo_children()))
+            button = next(child for child in footer.winfo_children()
+                          if isinstance(child, Btn) and child.cget("text") == "Continue")
+            observed["visible"] = bool(button.winfo_ismapped())
+            field.set("Synthetic-only-master-42!")
+            button.invoke()
+
+        self.app.after(150, submit)
+        watchdog = self.app.after(2000, lambda: Modal.open_modals[-1].cancel() if Modal.open_modals else None)
+        result = master_password_prompt(self.app, title="Enroll Windows Hello")
+        self.app.after_cancel(watchdog)
+        self.assertTrue(observed.get("visible"))
+        self.assertEqual(result, "Synthetic-only-master-42!")
+
     def test_xp_scrollbar_only_when_list_overflows(self):
         import vault
 
@@ -449,6 +513,9 @@ class UiIntegrityTests(unittest.TestCase):
             self.app.focus_get().event_generate("<Return>")
             self.app.update()
             self.assertIsNotNone(Popup.current)
+            # Other Windows GUI tests may change OS focus between dialogs.
+            # Start this keyboard check on the dropdown's first menu item.
+            Popup.current._focus(0)
             self.app.focus_get().event_generate("<Down>")
             self.app.focus_get().event_generate("<Return>")
             self.assertEqual(dialog.group_dd.get(), group["id"])

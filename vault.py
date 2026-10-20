@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import hmac
 import os
 import sys
 import tempfile
@@ -286,6 +287,21 @@ class VaultSession:
     def is_open(self) -> bool:
         return self._key is not None
 
+    def verify_master_password(self, candidate: str) -> bool:
+        """Reauthenticate the current session without opening a second vault session."""
+        key, salt, fingerprint = self._key, self._salt, self._fingerprint
+        if key is None or salt is None or fingerprint is None:
+            return False
+        try:
+            with open(VAULT_FILE, "rb") as file:
+                if not hmac.compare_digest(_digest(file.read()), fingerprint):
+                    return False
+        except OSError:
+            return False
+        derived = derive_key(candidate, salt)
+        return (self.is_open and self._key is key and self._fingerprint == fingerprint
+                and hmac.compare_digest(derived, key))
+
     def lockout_lab_key(self) -> bytes:
         """Derive a separate key while the authenticated vault session is unlocked."""
         if not self.is_open:
@@ -295,6 +311,26 @@ class VaultSession:
 
         return HKDF(algorithm=hashes.SHA256(), length=32, salt=self._salt,
                     info=b"Nasolt Vault Lockout Lab sidecar v1").derive(self._key)
+
+    def hello_enrollment_key(self) -> bytes:
+        """Separate integrity key for optional, nonsecret Hello enrollment metadata."""
+        if not self.is_open:
+            raise RuntimeError("Vault is locked")
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+        return HKDF(algorithm=hashes.SHA256(), length=32, salt=self._salt,
+                    info=b"Nasolt Vault Hello enrollment v1").derive(self._key)
+
+    def matches_disk(self) -> bool:
+        """Reject reauth if the encrypted vault changed since this session opened."""
+        if not self.is_open or self._fingerprint is None:
+            return False
+        try:
+            with open(VAULT_FILE, "rb") as file:
+                return hmac.compare_digest(_digest(file.read()), self._fingerprint)
+        except OSError:
+            return False
 
     def open(self, master_password: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Decrypt the vault. Raises ValueError on a wrong password / corrupt file."""
