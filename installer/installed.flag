@@ -1,0 +1,1 @@
+This file tells Nasolt Vault it was set up by the installer, so it keeps your vault in %APPDATA%\Nasolt Vault\data instead of next to the program.

@@ -1,0 +1,320 @@
+{
+  "brands": {
+    "google": {
+      "name": "Google",
+      "aliases": [
+        "google",
+        "google account",
+        "googleaccount"
+      ],
+      "domains": [
+        "google.com",
+        "accounts.google.com"
+      ],
+      "has_dark": false
+    },
+    "gmail": {
+      "name": "Gmail",
+      "aliases": [
+        "gmail",
+        "googlemail"
+      ],
+      "domains": [
+        "gmail.com",
+        "mail.google.com"
+      ],
+      "has_dark": false
+    },
+    "microsoft": {
+      "name": "Microsoft",
+      "aliases": [
+        "microsoft",
+        "outlook",
+        "office",
+        "office365",
+        "hotmail",
+        "live",
+        "xbox",
+        "onedrive",
+        "msn"
+      ],
+      "domains": [
+        "microsoft.com",
+        "live.com",
+        "outlook.com",
+        "office.com",
+        "hotmail.com",
+        "xbox.com"
+      ],
+      "has_dark": false
+    },
+    "apple": {
+      "name": "Apple",
+      "aliases": [
+        "apple",
+        "icloud",
+        "appleid",
+        "itunes"
+      ],
+      "domains": [
+        "apple.com",
+        "icloud.com"
+      ],
+      "has_dark": true
+    },
+    "amazon": {
+      "name": "Amazon",
+      "aliases": [
+        "amazon",
+        "aws",
+        "prime",
+        "primevideo",
+        "audible"
+      ],
+      "domains": [
+        "amazon.com",
+        "aws.amazon.com",
+        "primevideo.com",
+        "amazon.co.uk",
+        "amazon.de"
+      ],
+      "has_dark": true
+    },
+    "facebook": {
+      "name": "Facebook",
+      "aliases": [
+        "facebook",
+        "fb",
+        "meta"
+      ],
+      "domains": [
+        "facebook.com",
+        "fb.com",
+        "meta.com"
+      ],
+      "has_dark": false
+    },
+    "instagram": {
+      "name": "Instagram",
+      "aliases": [
+        "instagram",
+        "insta",
+        "ig"
+      ],
+      "domains": [
+        "instagram.com"
+      ],
+      "has_dark": false
+    },
+    "x": {
+      "name": "X",
+      "aliases": [
+        "x",
+        "twitter",
+        "tweet"
+      ],
+      "domains": [
+        "x.com",
+        "twitter.com"
+      ],
+      "has_dark": true
+    },
+    "linkedin": {
+      "name": "LinkedIn",
+      "aliases": [
+        "linkedin"
+      ],
+      "domains": [
+        "linkedin.com"
+      ],
+      "has_dark": false
+    },
+    "github": {
+      "name": "GitHub",
+      "aliases": [
+        "github",
+        "git hub"
+      ],
+      "domains": [
+        "github.com",
+        "gist.github.com"
+      ],
+      "has_dark": true
+    },
+    "netflix": {
+      "name": "Netflix",
+      "aliases": [
+        "netflix"
+      ],
+      "domains": [
+        "netflix.com"
+      ],
+      "has_dark": false
+    },
+    "spotify": {
+      "name": "Spotify",
+      "aliases": [
+        "spotify"
+      ],
+      "domains": [
+        "spotify.com"
+      ],
+      "has_dark": false
+    },
+    "paypal": {
+      "name": "PayPal",
+      "aliases": [
+        "paypal"
+      ],
+      "domains": [
+        "paypal.com"
+      ],
+      "has_dark": false
+    },
+    "dropbox": {
+      "name": "Dropbox",
+      "aliases": [
+        "dropbox"
+      ],
+      "domains": [
+        "dropbox.com"
+      ],
+      "has_dark": false
+    },
+    "slack": {
+      "name": "Slack",
+      "aliases": [
+        "slack"
+      ],
+      "domains": [
+        "slack.com"
+      ],
+      "has_dark": false
+    },
+    "discord": {
+      "name": "Discord",
+      "aliases": [
+        "discord"
+      ],
+      "domains": [
+        "discord.com",
+        "discordapp.com"
+      ],
+      "has_dark": false
+    },
+    "reddit": {
+      "name": "Reddit",
+      "aliases": [
+        "reddit"
+      ],
+      "domains": [
+        "reddit.com"
+      ],
+      "has_dark": false
+    },
+    "youtube": {
+      "name": "YouTube",
+      "aliases": [
+        "youtube",
+        "yt"
+      ],
+      "domains": [
+        "youtube.com",
+        "youtu.be"
+      ],
+      "has_dark": false
+    },
+    "whatsapp": {
+      "name": "WhatsApp",
+      "aliases": [
+        "whatsapp",
+        "wa"
+      ],
+      "domains": [
+        "whatsapp.com",
+        "web.whatsapp.com"
+      ],
+      "has_dark": false
+    },
+    "tiktok": {
+      "name": "TikTok",
+      "aliases": [
+        "tiktok"
+      ],
+      "domains": [
+        "tiktok.com"
+      ],
+      "has_dark": true
+    },
+    "steam": {
+      "name": "Steam",
+      "aliases": [
+        "steam",
+        "steampowered"
+      ],
+      "domains": [
+        "steampowered.com",
+        "steamcommunity.com"
+      ],
+      "has_dark": true
+    },
+    "adobe": {
+      "name": "Adobe",
+      "aliases": [
+        "adobe",
+        "creative cloud",
+        "photoshop",
+        "acrobat"
+      ],
+      "domains": [
+        "adobe.com"
+      ],
+      "has_dark": false
+    },
+    "zoom": {
+      "name": "Zoom",
+      "aliases": [
+        "zoom"
+      ],
+      "domains": [
+        "zoom.us"
+      ],
+      "has_dark": false
+    },
+    "twitch": {
+      "name": "Twitch",
+      "aliases": [
+        "twitch"
+      ],
+      "domains": [
+        "twitch.tv"
+      ],
+      "has_dark": false
+    },
+    "ebay": {
+      "name": "eBay",
+      "aliases": [
+        "ebay"
+      ],
+      "domains": [
+        "ebay.com"
+      ],
+      "has_dark": true
+    }
+  },
+  "generic": {
+    "bank": [
+      "bank",
+      "banking",
+      "credit union",
+      "savings",
+      "checking",
+      "chase",
+      "wells fargo",
+      "citi",
+      "barclays",
+      "hsbc",
+      "capital one"
+    ]
+  }
+}
