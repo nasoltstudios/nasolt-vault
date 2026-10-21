@@ -12,21 +12,26 @@ legacy `.nsv` importer. It does not change the encrypted `NSLT` vault format.
   recovery helper, 57 app assets, and Python, Tcl/Tk, Roboto, NSIS, and other
   third-party notice files.
 - NSIS 3.11 compiled the installer with no reported warnings. Its compiler log
-  records the freshly built 30,970,370-byte executable as the installer payload.
+  records the freshly built 29,867,938-byte executable as the installer payload.
 - A visible, responsive executable window opened and exited cleanly with an
   isolated synthetic `NASOLT_DATA_DIR`. No personal vault was opened.
-- Source tests: 157 run, 155 passed, 0 failed, 2 skipped. Synthetic fault
+- Source tests: 161 run, 159 passed, 0 failed, 2 skipped. Synthetic fault
   injection covered interrupted upgrade, denied replacement, partial clean
   installation, foreign folder refusal, and byte-identical preservation of a
-  fictional vault, backup, Lockout Lab sidecar, and settings.
+  fictional vault, backup, Lockout Lab sidecar, and settings. The new cleanup
+  tests interrupted every deletion step for committed and restored upgrades
+  and for committed clean installations. Recovery completed on retry without
+  rolling back a committed program or leaving reserved files that block the
+  next installation. Interruptions immediately before and after the atomic
+  journal transition also recovered to the correct previous or committed state.
 - Source and bundled headless self-tests, `compileall`, `pip check`, and pinned
   runtime/build `pip-audit` checks passed. The audits found no known
   vulnerabilities at the time of this check.
 
 | Ignored local artifact | SHA-256 |
 |---|---|
-| `packaging/windows/artifacts/dist/Nasolt Vault.exe` | `B2A156A40DB0596563D3301840C438215447C6DBD38FB804AEDCDF7F7ACC3CB0` |
-| `packaging/windows/artifacts/installer/Nasolt_Vault_Setup_2.0.0.exe` | `E0171AF2074320B780B9D4AC2E49756AA23F8EA19B4BDEDE7F553705DAA8241C` |
+| `packaging/windows/artifacts/dist/Nasolt Vault.exe` | `5ECF45BBAE2112D291E709E49ABAD4CF54334DD75E545537F5DD496E22064BCF` |
+| `packaging/windows/artifacts/installer/Nasolt_Vault_Setup_2.0.0.exe` | `A8201EBA27D7B81532128FADA612F0795292A1F63CA4B989FB46C07B66F3B4EB` |
 
 ## Installation checks still required
 

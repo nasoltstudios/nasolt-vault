@@ -131,8 +131,8 @@ Section "${APPNAME} (required)" SecMain
   StrCmp $0 0 main_registration_done main_registration_failed
   main_registration_failed:
     ClearErrors
-    ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade rollback "$INSTDIR"' $0
-    MessageBox MB_OK|MB_ICONSTOP "Setup could not verify installation registration. It attempted to restore the previous program. Vault data was not touched; inspect the installation folder before retrying." /SD IDOK
+    ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade recover "$INSTDIR"' $0
+    MessageBox MB_OK|MB_ICONSTOP "Setup could not complete installation verification. Recovery was attempted; a committed program is kept if cleanup was interrupted. Vault data was not touched. Inspect the installation folder and rerun setup." /SD IDOK
     Abort
   main_registration_done:
   ; Shortcut creation happens after commit. If it fails, the verified program

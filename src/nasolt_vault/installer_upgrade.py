@@ -15,6 +15,8 @@ EXE = ownership.EXE
 UNINSTALL = ownership.UNINSTALL
 MARKER = "installed.flag"
 JOURNAL = ".nasolt-install-transaction.json"
+COMMITTED_JOURNAL = ".nasolt-install-committed.json"
+RESTORED_JOURNAL = ".nasolt-install-restored.json"
 STAGED = {EXE: ".nasolt-next-app.exe", UNINSTALL: ".nasolt-next-uninstall.exe",
           MARKER: ".nasolt-next-marker"}
 PREVIOUS = {EXE: ".nasolt-previous-app.exe", UNINSTALL: ".nasolt-previous-uninstall.exe"}
@@ -60,8 +62,8 @@ def _journal_path(folder: Path) -> Path:
     return folder / JOURNAL
 
 
-def _read_journal(folder: Path) -> dict:
-    path = _journal_path(folder)
+def _read_journal(folder: Path, journal: str = JOURNAL) -> dict:
+    path = folder / journal
     if not _regular(path) or path.stat().st_size > 4096:
         raise UpgradeConflict("Installer recovery journal is missing or invalid")
     try:
@@ -105,9 +107,11 @@ def _remove_if_expected(path: Path, expected: str) -> None:
         path.unlink()
 
 
-def _clear_recovery_files(folder: Path, data: dict) -> None:
-    # The journal is removed first: after verification, the program is either
-    # committed or restored. Orphaned copies never affect the running app.
+def _clear_recovery_files(folder: Path, data: dict, journal: str) -> None:
+    # Only committed or restored transactions may be cleaned. Keep their
+    # journal until every reserved copy is gone, so interruption is retryable.
+    if journal not in (COMMITTED_JOURNAL, RESTORED_JOURNAL):
+        raise UpgradeConflict("An unfinished installation cannot be cleaned")
     removable: list[tuple[Path, str]] = []
     for name, saved in PREVIOUS.items():
         old_hash = data["previous"].get(name)
@@ -118,12 +122,49 @@ def _clear_recovery_files(folder: Path, data: dict) -> None:
     for path, expected in removable:
         if (path.exists() or path.is_symlink()) and _hash(path) != expected:
             raise UpgradeConflict("Installer recovery files changed")
-    _journal_path(folder).unlink()
     for path, expected in removable:
         _remove_if_expected(path, expected)
+    (folder / journal).unlink()
+
+
+def _recovery_journal(folder: Path) -> str | None:
+    found = [name for name in (JOURNAL, COMMITTED_JOURNAL, RESTORED_JOURNAL)
+             if (folder / name).exists() or (folder / name).is_symlink()]
+    if len(found) > 1:
+        raise UpgradeConflict("Conflicting installer recovery journals are present")
+    return found[0] if found else None
+
+
+def _verify_committed(folder: Path, data: dict) -> None:
+    for name in (EXE, UNINSTALL, MARKER):
+        expected = (data["previous"][MARKER]
+                    if data["kind"] == "upgrade" and name == MARKER
+                    else data["new"][name])
+        if _hash(folder / name) != expected:
+            raise UpgradeConflict("Installation is incomplete; recovery is available")
+    if not ownership._same_path(ownership._registered_install_dir() or "", str(folder)):
+        raise UpgradeConflict("Install registration was not written")
+    command = ownership._registered_uninstaller()
+    if not command or not ownership._same_path(command.strip().strip('"'), str(folder / UNINSTALL)):
+        raise UpgradeConflict("Uninstall registration was not written")
+
+
+def _verify_restored(folder: Path, data: dict) -> None:
+    if data["kind"] == "upgrade":
+        if not ownership._same_path(ownership._registered_install_dir() or "", str(folder)):
+            raise UpgradeConflict("Upgrade registration changed during recovery")
+        for name in (EXE, UNINSTALL, MARKER):
+            if _hash(folder / name) != data["previous"][name]:
+                raise UpgradeConflict("A restored program file changed during recovery")
+    else:
+        for name in (EXE, UNINSTALL, MARKER):
+            if (folder / name).exists() or (folder / name).is_symlink():
+                raise UpgradeConflict("A partially installed program file remains")
 
 
 def rollback(folder: Path) -> None:
+    if _recovery_journal(folder) != JOURNAL:
+        raise UpgradeConflict("The installation is already committed or restored")
     data = _read_journal(folder)
     if data["kind"] == "upgrade":
         if not ownership._same_path(ownership._registered_install_dir() or "", str(folder)):
@@ -153,14 +194,24 @@ def rollback(folder: Path) -> None:
                     raise UpgradeConflict("An installation file changed during recovery")
         for name in (EXE, UNINSTALL, MARKER):
             _remove_if_expected(folder / name, data["new"][name])
-    _clear_recovery_files(folder, data)
+    os.replace(_journal_path(folder), folder / RESTORED_JOURNAL)
+    _clear_recovery_files(folder, data, RESTORED_JOURNAL)
 
 
 def recover(folder: Path) -> None:
     if folder.is_symlink() or folder.is_junction():
         raise UpgradeConflict("Installation folder is linked")
-    if _journal_path(folder).exists() or _journal_path(folder).is_symlink():
+    journal = _recovery_journal(folder)
+    if journal == JOURNAL:
         rollback(folder)
+    elif journal == COMMITTED_JOURNAL:
+        data = _read_journal(folder, journal)
+        _verify_committed(folder, data)
+        _clear_recovery_files(folder, data, journal)
+    elif journal == RESTORED_JOURNAL:
+        data = _read_journal(folder, journal)
+        _verify_restored(folder, data)
+        _clear_recovery_files(folder, data, journal)
 
 
 def install(folder: Path, candidates: Path) -> None:
@@ -180,7 +231,8 @@ def install(folder: Path, candidates: Path) -> None:
             ownership._check_install_dir(folder, uninstall=True)
         except ownership.ShortcutConflict as exc:
             raise UpgradeConflict(str(exc)) from None
-    reserved = [folder / JOURNAL, folder / (JOURNAL + ".new"),
+    reserved = [folder / JOURNAL, folder / COMMITTED_JOURNAL,
+                folder / RESTORED_JOURNAL, folder / (JOURNAL + ".new"),
                 *(folder / p for p in STAGED.values()), *(folder / p for p in PREVIOUS.values())]
     if any(path.exists() or path.is_symlink() for path in reserved):
         raise UpgradeConflict("Unresolved installer recovery files are present")
@@ -234,17 +286,22 @@ def install(folder: Path, candidates: Path) -> None:
 
 
 def finalize(folder: Path) -> None:
-    data = _read_journal(folder)
-    for name in (EXE, UNINSTALL, MARKER):
-        expected = data["previous"][MARKER] if data["kind"] == "upgrade" and name == MARKER else data["new"][name]
-        if _hash(folder / name) != expected:
-            raise UpgradeConflict("Installation is incomplete; recovery is available")
-    if not ownership._same_path(ownership._registered_install_dir() or "", str(folder)):
-        raise UpgradeConflict("Install registration was not written")
-    command = ownership._registered_uninstaller()
-    if not command or not ownership._same_path(command.strip().strip('"'), str(folder / UNINSTALL)):
-        raise UpgradeConflict("Uninstall registration was not written")
-    _clear_recovery_files(folder, data)
+    journal = _recovery_journal(folder)
+    if journal is None:
+        # A retry after the final journal deletion is harmless only for a
+        # complete installation still owned by this per-user registration.
+        try:
+            ownership._check_install_dir(folder, uninstall=True)
+        except ownership.ShortcutConflict as exc:
+            raise UpgradeConflict(str(exc)) from None
+        return
+    if journal not in (JOURNAL, COMMITTED_JOURNAL):
+        raise UpgradeConflict("The installation was restored, not committed")
+    data = _read_journal(folder, journal)
+    _verify_committed(folder, data)
+    if journal == JOURNAL:
+        os.replace(_journal_path(folder), folder / COMMITTED_JOURNAL)
+    _clear_recovery_files(folder, data, COMMITTED_JOURNAL)
 
 
 def cli(args: list[str]) -> int:

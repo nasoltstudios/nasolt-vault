@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -49,6 +50,32 @@ class InstallerUpgradeTests(unittest.TestCase):
             (data / name).write_bytes(content)
         return files
 
+    def _populate_staged_copies(self):
+        # Valid reserved copies can remain after an interrupted transaction.
+        for name, staged in upgrade.STAGED.items():
+            shutil.copyfile(self.candidates / upgrade.CANDIDATE[name],
+                            self.install_dir / staged)
+
+    def _interrupt_cleanup_at(self, journal, step, action):
+        targets = [*(self.install_dir / name for name in upgrade.PREVIOUS.values()),
+                   *(self.install_dir / name for name in upgrade.STAGED.values()),
+                   self.install_dir / journal]
+        real_unlink = Path.unlink
+        deleted = 0
+
+        def interrupted_unlink(path, *args, **kwargs):
+            nonlocal deleted
+            real_unlink(path, *args, **kwargs)
+            if path in targets:
+                deleted += 1
+                if deleted == step:
+                    raise KeyboardInterrupt("synthetic cleanup interruption")
+
+        with mock.patch.object(Path, "unlink", new=interrupted_unlink):
+            with self.assertRaises(KeyboardInterrupt):
+                action()
+        self.assertEqual(deleted, step)
+
     def test_clean_install_commits_after_registration(self):
         upgrade.install(self.install_dir, self.candidates)
         self.assertTrue((self.install_dir / upgrade.JOURNAL).is_file())
@@ -56,6 +83,7 @@ class InstallerUpgradeTests(unittest.TestCase):
             upgrade.finalize(self.install_dir)
         self.registry_lookup.return_value = str(self.install_dir)
         self.uninstall_lookup.return_value = str(self.install_dir / upgrade.UNINSTALL)
+        upgrade.finalize(self.install_dir)
         upgrade.finalize(self.install_dir)
         self.assertEqual((self.install_dir / upgrade.EXE).read_bytes(), b"synthetic-new-program")
         self.assertFalse((self.install_dir / upgrade.JOURNAL).exists())
@@ -92,6 +120,128 @@ class InstallerUpgradeTests(unittest.TestCase):
         self.assertFalse((self.install_dir / upgrade.PREVIOUS[upgrade.EXE]).exists())
         for name, content in sidecars.items():
             self.assertEqual((self.install_dir / "data" / name).read_bytes(), content)
+
+    def test_committed_upgrade_recovers_after_every_cleanup_step(self):
+        for step in range(1, 7):  # two old copies, three staged copies, journal
+            with self.subTest(step=step):
+                if self.install_dir.exists():
+                    shutil.rmtree(self.install_dir)
+                self._owned_upgrade()
+                sidecars = self._sidecars()
+                upgrade.install(self.install_dir, self.candidates)
+                self._populate_staged_copies()
+                self._interrupt_cleanup_at(upgrade.COMMITTED_JOURNAL, step,
+                                           lambda: upgrade.finalize(self.install_dir))
+                self.assertFalse((self.install_dir / upgrade.JOURNAL).exists())
+                if step < 6:
+                    self.assertTrue((self.install_dir / upgrade.COMMITTED_JOURNAL).exists())
+                    with self.assertRaises(upgrade.UpgradeConflict):
+                        upgrade.rollback(self.install_dir)
+                if step % 2:
+                    upgrade.finalize(self.install_dir)
+                else:
+                    upgrade.recover(self.install_dir)
+                upgrade.finalize(self.install_dir)
+                upgrade.recover(self.install_dir)  # idempotent retry
+                self.assertEqual((self.install_dir / upgrade.EXE).read_bytes(),
+                                 b"synthetic-new-program")
+                self.assertEqual((self.install_dir / upgrade.UNINSTALL).read_bytes(),
+                                 b"synthetic-new-uninstaller")
+                for name, content in sidecars.items():
+                    self.assertEqual((self.install_dir / "data" / name).read_bytes(), content)
+                for name in (upgrade.JOURNAL, upgrade.COMMITTED_JOURNAL,
+                             *upgrade.PREVIOUS.values(), *upgrade.STAGED.values()):
+                    self.assertFalse((self.install_dir / name).exists())
+                # The next upgrade is not blocked by an orphaned reserved file.
+                upgrade.install(self.install_dir, self.candidates)
+                upgrade.finalize(self.install_dir)
+
+    def test_committed_clean_install_recovers_after_every_cleanup_step(self):
+        for step in range(1, 5):  # three staged copies, journal
+            with self.subTest(step=step):
+                if self.install_dir.exists():
+                    shutil.rmtree(self.install_dir)
+                upgrade.install(self.install_dir, self.candidates)
+                self.registry_lookup.return_value = str(self.install_dir)
+                self.uninstall_lookup.return_value = str(self.install_dir / upgrade.UNINSTALL)
+                self._populate_staged_copies()
+                self._interrupt_cleanup_at(upgrade.COMMITTED_JOURNAL, step,
+                                           lambda: upgrade.finalize(self.install_dir))
+                if step % 2:
+                    upgrade.finalize(self.install_dir)
+                else:
+                    upgrade.recover(self.install_dir)
+                upgrade.finalize(self.install_dir)
+                upgrade.recover(self.install_dir)
+                self.assertEqual((self.install_dir / upgrade.EXE).read_bytes(),
+                                 b"synthetic-new-program")
+                for name in (upgrade.JOURNAL, upgrade.COMMITTED_JOURNAL,
+                             *upgrade.STAGED.values()):
+                    self.assertFalse((self.install_dir / name).exists())
+                upgrade.install(self.install_dir, self.candidates)
+
+    def test_finalize_transition_is_atomic_for_recovery(self):
+        for after_replace in (False, True):
+            with self.subTest(after_replace=after_replace):
+                if self.install_dir.exists():
+                    shutil.rmtree(self.install_dir)
+                self._owned_upgrade()
+                sidecars = self._sidecars()
+                upgrade.install(self.install_dir, self.candidates)
+                real_replace = os.replace
+
+                def interrupt_transition(source, target):
+                    if Path(target).name == upgrade.COMMITTED_JOURNAL:
+                        if after_replace:
+                            real_replace(source, target)
+                        raise KeyboardInterrupt("synthetic phase transition interruption")
+                    return real_replace(source, target)
+
+                with mock.patch.object(upgrade.os, "replace", side_effect=interrupt_transition):
+                    with self.assertRaises(KeyboardInterrupt):
+                        upgrade.finalize(self.install_dir)
+                upgrade.recover(self.install_dir)
+                expected = b"synthetic-new-program" if after_replace else b"synthetic-old-program"
+                self.assertEqual((self.install_dir / upgrade.EXE).read_bytes(), expected)
+                for name, content in sidecars.items():
+                    self.assertEqual((self.install_dir / "data" / name).read_bytes(), content)
+                self.assertFalse((self.install_dir / upgrade.JOURNAL).exists())
+                self.assertFalse((self.install_dir / upgrade.COMMITTED_JOURNAL).exists())
+
+    def test_restored_upgrade_recovers_after_every_cleanup_step(self):
+        for step in range(1, 7):
+            with self.subTest(step=step):
+                if self.install_dir.exists():
+                    shutil.rmtree(self.install_dir)
+                self._owned_upgrade()
+                sidecars = self._sidecars()
+                upgrade.install(self.install_dir, self.candidates)
+                real_replace = os.replace
+
+                def interrupt_after_restored_journal(source, target):
+                    real_replace(source, target)
+                    if Path(target).name == upgrade.RESTORED_JOURNAL:
+                        raise KeyboardInterrupt("synthetic phase transition interruption")
+
+                with mock.patch.object(upgrade.os, "replace", side_effect=interrupt_after_restored_journal):
+                    with self.assertRaises(KeyboardInterrupt):
+                        upgrade.rollback(self.install_dir)
+                self._populate_staged_copies()
+                self._interrupt_cleanup_at(upgrade.RESTORED_JOURNAL, step,
+                                           lambda: upgrade.recover(self.install_dir))
+                if step < 6:
+                    with self.assertRaises(upgrade.UpgradeConflict):
+                        upgrade.finalize(self.install_dir)
+                upgrade.recover(self.install_dir)
+                upgrade.recover(self.install_dir)
+                self.assertEqual((self.install_dir / upgrade.EXE).read_bytes(),
+                                 b"synthetic-old-program")
+                for name, content in sidecars.items():
+                    self.assertEqual((self.install_dir / "data" / name).read_bytes(), content)
+                for name in (upgrade.JOURNAL, upgrade.RESTORED_JOURNAL,
+                             *upgrade.PREVIOUS.values(), *upgrade.STAGED.values()):
+                    self.assertFalse((self.install_dir / name).exists())
+                upgrade.install(self.install_dir, self.candidates)
 
     def test_denied_uninstaller_replace_rolls_back_upgrade(self):
         self._owned_upgrade()
