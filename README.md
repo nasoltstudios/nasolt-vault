@@ -6,7 +6,7 @@
 
 Nasolt Vault is a free, open-source password manager for Windows by Nasolt Studios. It runs locally with Python and CustomTkinter. Your vault and optional recovery map stay on your device; the app does not use a server, AI, or telemetry.
 
-**Current distribution:** public source code only. The Windows executable and NSIS installer have not been approved for distribution. Run the application from source using the instructions below.
+**Current distribution:** public source code only. Windows executable and NSIS installer builds are under verification and are not approved for distribution. Run the application from source using the instructions below. Linux and macOS are not supported.
 
 ## Features
 
@@ -39,6 +39,7 @@ py -3.12 -m venv .venv
 ```
 
 If the `py` launcher is unavailable, use `python -m venv .venv` with a Python 3.12 installation. Package installation requires internet access; normal vault operation is offline. The GUI and source tests have been exercised on Windows 11 with Python 3.12.3.
+After updating an existing checkout, rerun `python -m pip install -r requirements.txt` inside its virtual environment so updated security pins are applied.
 
 Run the source checks with fictional data in a disposable `NASOLT_DATA_DIR`:
 
@@ -52,6 +53,8 @@ New-Item -ItemType Directory -Path $env:NASOLT_DATA_DIR | Out-Null
 ```
 
 For isolated manual testing without PowerShell, double-click [Run_Nasolt_Vault_Test.bat](Run_Nasolt_Vault_Test.bat). It creates a separate `.venv-test` environment and uses `%LOCALAPPDATA%\Nasolt Vault Test Data`, retaining that test data between launches. Use fictional accounts and passwords only. The launcher keeps its console open after the app exits so startup errors remain visible.
+
+Windows source checks also run through [the CI workflow](.github/workflows/windows-source-tests.yml) on proposed changes and pushes to `main`. The workflow is newly prepared and its hosted-runner result is not yet verified. Local packaging instructions are in [packaging/windows](packaging/windows/README.md); builds stay in ignored `artifacts/windows/` and remain unapproved for distribution.
 
 A normal source run uses `data/` beside the source when writable. `NASOLT_DATA_DIR` overrides the data location. Keep a separate encrypted copy of the **whole** data folder before changing installations or testing new builds. See [RELEASE_READINESS.md](RELEASE_READINESS.md) for the current source and binary verification status.
 
@@ -77,5 +80,7 @@ Password-protected `.nve` exports use Argon2id and authenticated AES-256-GCM enc
 - [Security policy](SECURITY.md) — report vulnerabilities privately
 - [Contributing guide](CONTRIBUTING.md) — use synthetic data and run source checks
 - [Third-party notices](THIRD_PARTY_NOTICES.md) — dependency and icon attributions
+- [Architecture](docs/ARCHITECTURE.md), [threat model](docs/THREAT_MODEL.md), and [Windows release checklist](docs/RELEASE_CHECKLIST.md)
+- [Future full Windows Hello unlock proposal](docs/WINDOWS_HELLO_FULL_UNLOCK_PROPOSAL.md) — **unimplemented**
 
 No application screenshots are included until screenshots made with fictional data are reviewed and approved. The Windows executable and installer remain unverified and must not be distributed.

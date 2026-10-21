@@ -1,0 +1,35 @@
+name: Windows source tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  source-tests:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned runtime dependencies
+        shell: pwsh
+        run: python -m pip install -r requirements.txt
+      - name: Run synthetic source checks
+        shell: pwsh
+        run: |
+          $env:NASOLT_DATA_DIR = Join-Path $env:RUNNER_TEMP 'nasolt-ci-synthetic-data'
+          New-Item -ItemType Directory -Force -Path $env:NASOLT_DATA_DIR | Out-Null
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m compileall -q .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python main.py --selftest
+          exit $LASTEXITCODE

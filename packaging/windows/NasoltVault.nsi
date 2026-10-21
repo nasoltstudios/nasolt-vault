@@ -8,7 +8,7 @@ Unicode True
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NasoltVault"
 
 Name "${APPNAME}"
-OutFile "Output\Nasolt_Vault_Setup_${APPVER}.exe"
+OutFile "..\..\artifacts\windows\installer\Nasolt_Vault_Setup_${APPVER}.exe"
 InstallDir "$LOCALAPPDATA\Programs\${APPNAME}"
 InstallDirRegKey HKCU "Software\NasoltVault" "InstallDir"
 RequestExecutionLevel user                      ; per-user install: no administrator rights needed
@@ -24,8 +24,8 @@ VIAddVersionKey /LANG=1033 "FileVersion" "${APPVER}"
 VIAddVersionKey /LANG=1033 "ProductVersion" "${APPVER}"
 
 !include "MUI2.nsh"
-!define MUI_ICON   "..\assets\app.ico"
-!define MUI_UNICON "..\assets\app.ico"
+!define MUI_ICON   "..\..\assets\app.ico"
+!define MUI_UNICON "..\..\assets\app.ico"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TEXT "This will install ${APPNAME} ${APPVER} on your computer.$\r$\n$\r$\nInstalled vaults normally live in:$\r$\n%APPDATA%\Nasolt Vault\data$\r$\n$\r$\nAn existing vault beside the program continues to be used. Updating keeps your vault files. Click Next to continue."
 
@@ -60,14 +60,33 @@ FunctionEnd
 ; ---------- install ----------
 Section "${APPNAME} (required)" SecMain
   SectionIn RO
+  ; Check both fixed Start Menu names before copying any installed files.
+  ; The bundled helper verifies target, arguments, workdir, icon and hotkey,
+  ; plus the previous install marker and HKCU registration for upgrades.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File /oname=NasoltShortcutCheck.exe "..\..\artifacts\windows\dist\${EXE}"
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-shortcuts check-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors main_shortcut_conflict
+  StrCmp $0 0 main_shortcuts_checked main_shortcut_conflict
+  main_shortcut_conflict:
+    MessageBox MB_OK|MB_ICONSTOP "A Nasolt Vault Start Menu shortcut cannot be verified as belonging to this installation. Setup stopped before changing program files or shortcuts. Resolve the conflicting shortcut and retry." /SD IDOK
+    Abort
+  main_shortcuts_checked:
   SetOutPath "$INSTDIR"
-  File "..\dist\${EXE}"
+  File "..\..\artifacts\windows\dist\${EXE}"
   File "installed.flag"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXE}"
-  CreateShortcut "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts install-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors main_shortcut_install_failed
+  StrCmp $0 0 main_shortcut_install_done main_shortcut_install_failed
+  main_shortcut_install_failed:
+    MessageBox MB_OK|MB_ICONSTOP "Nasolt Vault could not create or verify its Start Menu shortcuts. Setup stopped; existing shortcuts were preserved." /SD IDOK
+    Abort
+  main_shortcut_install_done:
 
   WriteRegStr   HKCU "Software\NasoltVault" "InstallDir" "$INSTDIR"
   WriteRegStr   HKCU "${UNINSTKEY}" "DisplayName"     "${APPNAME}"
@@ -129,7 +148,13 @@ Section "${APPNAME} (required)" SecMain
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${EXE}"
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts install-desktop "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors desktop_shortcut_conflict
+  StrCmp $0 0 desktop_shortcut_done desktop_shortcut_conflict
+  desktop_shortcut_conflict:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "The desktop shortcut was not created because an existing shortcut could not be verified or the shortcut operation failed. The existing shortcut was preserved." /SD IDOK
+  desktop_shortcut_done:
 SectionEnd
 
 LangString DESC_Main    ${LANG_ENGLISH} "The program itself."
@@ -144,6 +169,16 @@ Section "Uninstall"
   IfFileExists "$INSTDIR\installed.flag" +3 0
     MessageBox MB_OK|MB_ICONSTOP "The installation marker is missing. Uninstallation stopped to avoid deleting files from an unexpected folder." /SD IDOK
     Abort
+  ; Refuse uninstall before removing any files if a fixed-name shortcut is
+  ; foreign, unreadable or changed. Other Start Menu contents are preserved.
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts uninstall "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors uninstall_shortcut_conflict
+  StrCmp $0 0 uninstall_shortcuts_done uninstall_shortcut_conflict
+  uninstall_shortcut_conflict:
+    MessageBox MB_OK|MB_ICONSTOP "Uninstall stopped because a Nasolt Vault shortcut could not be verified or removed. No program or vault files were deleted. Resolve the conflicting shortcut and retry." /SD IDOK
+    Abort
+  uninstall_shortcuts_done:
   ; The app verifies its Run command and shortcut targets before removal.
   ClearErrors
   ExecWait '"$INSTDIR\${EXE}" --unregister-startup' $0
@@ -156,10 +191,6 @@ Section "Uninstall"
   Delete "$INSTDIR\installed.flag"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir  "$INSTDIR"                                   ; only removed if empty
-  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
-  Delete "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk"
-  RMDir  "$SMPROGRAMS\${APPNAME}"
-  Delete "$DESKTOP\${APPNAME}.lnk"
   DeleteRegValue HKCU "${UNINSTKEY}" "DisplayName"
   DeleteRegValue HKCU "${UNINSTKEY}" "DisplayVersion"
   DeleteRegValue HKCU "${UNINSTKEY}" "Publisher"
