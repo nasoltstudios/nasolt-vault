@@ -1,0 +1,85 @@
+"""
+paths.py — where the app finds its bundled assets and where it keeps user data.
+
+* resource_path(): read-only files shipped with the app (icons, brand logos).
+  Works from source, and inside a PyInstaller bundle (sys._MEIPASS).
+* data_dir(): the writable folder holding vault.enc and settings.json.
+
+Data-folder rules (so an installed copy under "C:\\Program Files" doesn't crash):
+  1. NASOLT_DATA_DIR environment variable (used by tests / power users)
+  2. an existing ./data/vault.enc next to the app  (keeps every existing vault working)
+  3. ./data next to the app, if that folder is writable and the app was NOT set up by the installer (portable mode)
+  4. %APPDATA%\\Nasolt Vault\\data  (installed copy — the installer drops an `installed.flag` file — or a read-only folder)
+"""
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+
+FROZEN: bool = bool(getattr(sys, "frozen", False))
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+_source_root = os.path.dirname(os.path.dirname(PACKAGE_DIR))
+SOURCE_CHECKOUT = (os.path.basename(os.path.dirname(PACKAGE_DIR)).casefold() == "src"
+                   and os.path.isdir(os.path.join(_source_root, "packaging")))
+# Preserve the old source-portable data folder beside the former root main.py.
+APP_DIR: str = (os.path.dirname(sys.executable) if FROZEN else
+                _source_root if SOURCE_CHECKOUT else PACKAGE_DIR)
+
+_cache: dict[str, str] = {}
+
+
+def resource_path(*parts: str) -> str:
+    base = (os.path.join(sys._MEIPASS, "nasolt_vault") if FROZEN and hasattr(sys, "_MEIPASS")
+            else PACKAGE_DIR)
+    return os.path.join(base, *parts)
+
+
+def _is_writable(folder: str) -> bool:
+    probe = None
+    try:
+        os.makedirs(folder, exist_ok=True)
+        fd, probe = tempfile.mkstemp(prefix=".nasolt-write-test-", dir=folder)
+        os.close(fd)
+        return True
+    except OSError:
+        return False
+    finally:
+        if probe is not None:
+            try:
+                os.unlink(probe)
+            except OSError:
+                pass
+
+
+def is_installed() -> bool:
+    """True when this copy was put in place by the Windows installer (it writes installed.flag next to the exe)."""
+    return os.path.isfile(os.path.join(APP_DIR, "installed.flag"))
+
+
+def data_dir() -> str:
+    override = os.environ.get("NASOLT_DATA_DIR", "")
+    key = override or "__default__"
+    if key in _cache:
+        return _cache[key]
+
+    if override:
+        os.makedirs(override, exist_ok=True)
+        result = override
+    else:
+        legacy = os.path.join(APP_DIR, "data")
+        if os.path.isfile(os.path.join(legacy, "vault.enc")) or (
+                (FROZEN or SOURCE_CHECKOUT) and not is_installed() and _is_writable(legacy)):
+            result = legacy
+        else:
+            root = os.environ.get("APPDATA") or os.path.expanduser("~")
+            result = os.path.join(root, "Nasolt Vault", "data")
+            os.makedirs(result, exist_ok=True)
+    _cache[key] = result
+    return result
+
+
+def default_export_dir() -> str:
+    docs = os.path.join(os.path.expanduser("~"), "Documents")
+    base = docs if os.path.isdir(docs) else os.path.expanduser("~")
+    return os.path.join(base, "NasoltVault")

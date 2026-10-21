@@ -19,4 +19,4 @@ Keep an independently verified encrypted backup of the entire data folder, inclu
 
 ## Review priorities
 
-Review any change to `crypto.py`, `vault.py`, `paths.py`, `lockout_lab.py`, `export.py`, `quick_access.py`, native Windows integration, or NSIS source with synthetic compatibility fixtures and manual data-preservation checks. Keep the NSLT format unchanged without a migration plan. See [Security policy](../SECURITY.md) for private vulnerability reporting.
+Review any change to `crypto.py`, `vault.py`, `paths.py`, `lockout_lab.py`, `export.py`, `quick_access.py`, native Windows integration, or NSIS source with synthetic compatibility fixtures and manual data-preservation checks. Keep the NSLT format unchanged without a migration plan. See [Security policy](SECURITY.md) for private vulnerability reporting.

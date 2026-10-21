@@ -12,8 +12,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from instance import InstanceCoordinator
-from windows_startup import (_launch_target, cleanup_legacy_voice_link,
+from nasolt_vault.instance import InstanceCoordinator
+from nasolt_vault.paths import APP_DIR, SOURCE_CHECKOUT
+from nasolt_vault.windows_startup import (_launch_target, _legacy_launch_target,
+                             _legacy_source_commands, _owned_shortcut, cleanup_legacy_voice_link,
                              launch_command, sync_cold_start_links, sync_startup)
 
 
@@ -60,8 +62,8 @@ class InstanceTests(unittest.TestCase):
         self.assertNotIn('Delete "$SMPROGRAMS\\${APPNAME}\\Nasolt VoiceKey.lnk"', uninstall)
 
     def test_obsolete_voice_command_does_not_launch_a_window(self):
-        import main
-        with mock.patch.object(main.sys, "argv", ["main.py", "--voice"]), \
+        from nasolt_vault import main
+        with mock.patch.object(main.sys, "argv", ["nasolt_vault", "--voice"]), \
              mock.patch.object(main, "cleanup_legacy_voice_link", return_value="isolated test mode") as cleanup, \
              mock.patch.object(main, "App", side_effect=AssertionError("GUI must stay closed")):
             self.assertEqual(main.main(), 0)
@@ -97,6 +99,23 @@ class StartupRegistrationTests(unittest.TestCase):
             self.assertEqual(sync_startup(True, isolated=False), "unowned startup entry")
             self.assertEqual(values["Nasolt Vault"], '"C:\\Unrelated\\program.exe" --background')
 
+            legacy = _legacy_source_commands()
+            if legacy:
+                values["Nasolt Vault"] = next(iter(legacy))
+                self.assertEqual(sync_startup(True, isolated=False), "enabled")
+                self.assertEqual(values["Nasolt Vault"], launch_command())
+
+    def test_previous_source_venv_shortcut_is_recognized_only_for_this_checkout(self):
+        if not SOURCE_CHECKOUT:
+            self.skipTest("requires a source checkout")
+        old_pythonw = os.path.join(APP_DIR, ".venv", "Scripts", "pythonw.exe")
+        details = {"target": old_pythonw,
+                   "arguments": subprocess.list2cmdline([os.path.join(APP_DIR, "main.py"), "--summon"]),
+                   "workdir": APP_DIR, "icon": os.path.join(APP_DIR, "assets", "app.ico")}
+        self.assertTrue(_owned_shortcut(details, "summon"))
+        details["workdir"] = os.path.join(APP_DIR, "other")
+        self.assertFalse(_owned_shortcut(details, "summon"))
+
     def test_isolated_data_never_changes_windows_startup(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_startup_") as folder:
             with mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": folder}):
@@ -110,7 +129,7 @@ class StartupRegistrationTests(unittest.TestCase):
             self.assertTrue((link_folder / "Nasolt Vault Summon.lnk").is_file())
             voice_link = link_folder / "Nasolt VoiceKey.lnk"
             self.assertFalse(voice_link.exists())
-            target, arguments, workdir = _launch_target("voice")
+            target, arguments, workdir = _legacy_launch_target("voice") or _launch_target("voice")
             _make_test_shortcut(voice_link, target, arguments, workdir,
                                 os.path.join(workdir, "assets", "app.ico"))
             self.assertTrue(voice_link.is_file())
@@ -148,7 +167,7 @@ class StartupRegistrationTests(unittest.TestCase):
             voice_link = link_folder / "Nasolt VoiceKey.lnk"
             summon_link = link_folder / "Nasolt Vault Summon.lnk"
             for route, link in (("voice", voice_link), ("summon", summon_link)):
-                target, arguments, workdir = _launch_target(route)
+                target, arguments, workdir = _legacy_launch_target(route) or _launch_target(route)
                 _make_test_shortcut(link, target, arguments, workdir,
                                     os.path.join(workdir, "assets", "app.ico"))
             self.assertEqual(cleanup_legacy_voice_link(isolated=False, programs_dir=folder), "removed")
@@ -170,10 +189,10 @@ class BackgroundProcessTests(unittest.TestCase):
         user32.FindWindowW.restype = wintypes.HWND
         user32.PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
         user32.PostMessageW.restype = wintypes.BOOL
-        main = str(Path(__file__).resolve().parents[1] / "main.py")
         with tempfile.TemporaryDirectory(prefix="nasolt_process_") as folder:
             env = os.environ.copy()
             env["NASOLT_DATA_DIR"] = folder
+            env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
             # A Windows venv python.exe may be a redirector with a different
             # PID than the interpreter that owns the native tray window.
             marker = Path(folder, "test-process-id")
@@ -182,12 +201,10 @@ class BackgroundProcessTests(unittest.TestCase):
                 "import os, runpy, sys\n"
                 "from pathlib import Path\n"
                 "Path(os.environ['NASOLT_TEST_PID_FILE']).write_text(str(os.getpid()))\n"
-                "sys.argv = [os.environ['NASOLT_TEST_MAIN'], '--background']\n"
-                "sys.path.insert(0, str(Path(sys.argv[0]).parent))\n"
-                "runpy.run_path(sys.argv[0], run_name='__main__')\n",
+                "sys.argv = ['nasolt_vault', '--background']\n"
+                "runpy.run_module('nasolt_vault', run_name='__main__')\n",
                 encoding="utf-8")
             env["NASOLT_TEST_PID_FILE"] = str(marker)
-            env["NASOLT_TEST_MAIN"] = main
             for _ in range(2):
                 marker.unlink(missing_ok=True)
                 process = subprocess.Popen([sys.executable, str(launcher)], env=env,
@@ -203,7 +220,7 @@ class BackgroundProcessTests(unittest.TestCase):
                             break
                         time.sleep(0.05)
                     self.assertTrue(hwnd, "Background process did not create a tray window")
-                    second = subprocess.run([sys.executable, main, "--background"], env=env,
+                    second = subprocess.run([sys.executable, "-m", "nasolt_vault", "--background"], env=env,
                                             capture_output=True, timeout=8,
                                             creationflags=subprocess.CREATE_NO_WINDOW)
                     self.assertEqual(second.returncode, 0)
@@ -223,11 +240,11 @@ class BackgroundGuiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="nasolt_background_")
         self.env = mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": self.temp.name})
         self.env.start()
-        import vault
+        from nasolt_vault import vault
         self.paths = mock.patch.multiple(vault, VAULT_DIR=self.temp.name,
                                          VAULT_FILE=str(Path(self.temp.name) / "vault.enc"))
         self.paths.start()
-        from main import App
+        from nasolt_vault.main import App
         self.app = App(background=True)
         deadline = time.monotonic() + 10
         while not self.app.tray.active and time.monotonic() < deadline:
@@ -271,7 +288,7 @@ class BackgroundGuiTests(unittest.TestCase):
         self.assertTrue(self.app.session.is_open)
         self.app.tray_action("exit")
         self.assertFalse(self.app.tray.active)
-        from main import App
+        from nasolt_vault.main import App
         self.app = App(background=True)
         self.assertFalse(self.app.session.is_open)
         self.assertEqual(self.app.login.mode, "unlock")
@@ -291,8 +308,8 @@ class BackgroundGuiTests(unittest.TestCase):
         self.assertIsNone(self.app.quick_access.request)
 
     def test_cold_start_summon_route_stays_hidden_until_authentication(self):
-        import vault
-        from main import App
+        from nasolt_vault import vault
+        from nasolt_vault.main import App
         self.app.close()
         session = vault.VaultSession()
         try:

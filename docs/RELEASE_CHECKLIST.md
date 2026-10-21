@@ -21,12 +21,12 @@ See [Windows packaging](../packaging/windows/README.md) for local build commands
 Use a disposable Windows user or VM that contains no personal vault. In a PowerShell window at the source root, obtain the official portable NSIS archive from [the NSIS project](https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download), confirm its SHA-256 is `c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1`, and extract it to a user-owned folder. Then run:
 
 ```powershell
-cmd /c BUILD_WINDOWS.bat nopause
+cmd /c packaging\windows\BUILD_WINDOWS.bat nopause
 $nsis = 'C:\path\to\nsis-3.11\makensis.exe'
 Push-Location packaging\windows
 & $nsis /V2 NasoltVault.nsi
 Pop-Location
-Get-FileHash -Algorithm SHA256 -LiteralPath 'artifacts\windows\installer\Nasolt_Vault_Setup_2.0.0.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath 'packaging\windows\artifacts\installer\Nasolt_Vault_Setup_2.0.0.exe'
 ```
 
 Check the NSIS exit code and the output file before using it. In the disposable account, record PASS, FAIL, SKIPPED, or UNVERIFIED for each checklist item above. Create only fictional vault data; compare hashes and successful unlock of the encrypted vault and sidecars before upgrade, after uninstall, and after reinstall. Verify app-owned startup and shortcut registrations are removed. Do not distribute the installer while any data-preservation or cleanup result remains unverified.

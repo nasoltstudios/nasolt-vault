@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hello_enrollment
-import vault
-import windows_hello
+from nasolt_vault import hello_enrollment
+from nasolt_vault import vault
+from nasolt_vault import windows_hello
 
 
 class HelloEnrollmentTests(unittest.TestCase):

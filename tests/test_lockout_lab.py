@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import test_vault_baseline as baseline
-from lockout_lab import LabError, LabStore, add_node, add_route, circular_nodes, empty_model, simulate
+from nasolt_vault.lockout_lab import LabError, LabStore, add_node, add_route, circular_nodes, empty_model, simulate
 
 vault = baseline.vault
 MASTER = baseline.MASTER
@@ -128,7 +128,7 @@ class StorageTests(unittest.TestCase):
         self.store.save(model)
         before = self.store.path.read_bytes()
         add_node(model, "Two", "account")
-        with mock.patch("lockout_lab.os.replace", side_effect=OSError("synthetic failure")):
+        with mock.patch("nasolt_vault.lockout_lab.os.replace", side_effect=OSError("synthetic failure")):
             with self.assertRaises(OSError):
                 self.store.save(model)
         self.assertEqual(self.store.path.read_bytes(), before)
@@ -138,7 +138,7 @@ class StorageTests(unittest.TestCase):
 
     def test_authenticated_malformed_lab_and_new_vault_key_are_rejected(self):
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        from lockout_lab import MAGIC
+        from nasolt_vault.lockout_lab import MAGIC
 
         nonce = os.urandom(12)
         malformed = MAGIC + nonce + AESGCM(self.session.lockout_lab_key()).encrypt(nonce, b'{"version":1,"nodes":{}}', MAGIC)
@@ -173,7 +173,8 @@ class StorageTests(unittest.TestCase):
 
     def test_old_bare_list_vault_can_use_sidecar_without_format_change(self):
         self.session.close()
-        import crypto, json
+        from nasolt_vault import crypto
+        import json
         salt = os.urandom(crypto.SALT_SIZE)
         key = crypto.derive_key(MASTER, salt)
         legacy = [{"id": "historical-synthetic", "title": "Old", "password": "synthetic-only"}]

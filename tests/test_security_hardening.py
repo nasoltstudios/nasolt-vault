@@ -8,9 +8,9 @@ from unittest import mock
 
 import test_vault_baseline as baseline
 
-import clipboard
-import app_settings
-import paths
+from nasolt_vault import clipboard
+from nasolt_vault import app_settings
+from nasolt_vault import paths
 
 
 class SessionLifecycleTests(unittest.TestCase):
