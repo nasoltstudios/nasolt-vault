@@ -35,12 +35,11 @@ if errorlevel 1 goto :setup_error
 "%TEST_PYTHON%" -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
 if errorlevel 1 goto :setup_error
 
-if not exist ".venv-test\.nasolt_setup_done" (
-    echo Installing the required Python packages ^(first launch only^)...
-    "%TEST_PYTHON%" -m pip install -r "requirements.txt"
-    if errorlevel 1 goto :setup_error
-    type nul > ".venv-test\.nasolt_setup_done"
-)
+rem Exact pins may change between source updates. Pip is quick when already
+rem satisfied, and this avoids silently reusing an outdated dependency.
+echo Checking the required Python packages...
+"%TEST_PYTHON%" -m pip install --disable-pip-version-check -r "requirements.txt"
+if errorlevel 1 goto :setup_error
 
 rem Force a separate, persistent data folder. Never use the user's regular vault.
 rem NASOLT_TEST_DATA_DIR is an optional override for disposable launcher checks.

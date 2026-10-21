@@ -153,7 +153,7 @@ class MigrationTests(unittest.TestCase):
                 os.environ["APPDATA"] = old_appdata
 
     def test_uninstaller_contains_no_recursive_user_data_delete(self):
-        script = (Path(__file__).parent.parent / "installer" / "NasoltVault.nsi").read_text(encoding="utf-8")
+        script = (Path(__file__).parent.parent / "packaging" / "windows" / "NasoltVault.nsi").read_text(encoding="utf-8")
         self.assertNotIn("RMDir /r", script)
         self.assertNotIn("CopyFiles /SILENT", script)
         self.assertIn("--migrate-vault", script)

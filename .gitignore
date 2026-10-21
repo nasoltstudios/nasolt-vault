@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .venv/
 .venv-test/
+.venv-build/
+artifacts/
 build/
 dist/
 *.spec
@@ -9,6 +11,10 @@ installer/Output/
 data/
 **/vault.enc*
 **/lockout_lab.enc*
+**/settings.json
+**/hello-enrollment.json
+**/activation_requests/
+**/app.instance.lock
 **/nasolt_vault.log
 *.csv
 *.nve

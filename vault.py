@@ -17,8 +17,10 @@ import hmac
 import os
 import sys
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 
 from crypto import (
@@ -132,6 +134,10 @@ class VaultBusyError(RuntimeError):
 
 class VaultConflictError(RuntimeError):
     """The primary changed since this session opened it."""
+
+
+class VaultOperationCancelled(RuntimeError):
+    """An unlock was revoked before it could establish an open session."""
 
 
 class _FileLock:
@@ -267,10 +273,34 @@ def backup_is_valid(master_password: str) -> bool:
 
 
 # ---------------------------------------------------------------- session
+def _serialized_session(method):
+    """Keep a lock or save from overlapping a background unlock."""
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self._state_lock:
+            return method(self, *args, **kwargs)
+    return guarded
+
+
+def _serialized_opening(method):
+    """Reject a queued create or recovery that a lock has already revoked."""
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        ticket = self._open_ticket()
+        with self._state_lock:
+            self._check_open_ticket(ticket)
+            return method(self, *args, **kwargs)
+    return guarded
+
+
 class VaultSession:
     """An unlocked vault: holds the derived key so saves are instant."""
 
     def __init__(self) -> None:
+        self._state_lock = threading.RLock()
+        self._revocation_lock = threading.Lock()
+        self._generation = 0
+        self._pending_closes = 0
         self._key: Optional[bytes] = None
         self._salt: Optional[bytes] = None
         self._fingerprint: Optional[bytes] = None
@@ -283,10 +313,31 @@ class VaultSession:
         lock.acquire()
         self._lock = lock
 
+    def _open_ticket(self) -> int:
+        with self._revocation_lock:
+            if self._pending_closes:
+                raise VaultOperationCancelled("Vault unlock was canceled by a lock request.")
+            return self._generation
+
+    def _check_open_ticket(self, ticket: int) -> None:
+        with self._revocation_lock:
+            if self._pending_closes or ticket != self._generation:
+                raise VaultOperationCancelled("Vault unlock was canceled by a lock request.")
+
+    def _close_locked(self) -> None:
+        self._key = None
+        self._salt = None
+        self._fingerprint = None
+        if self._lock is not None:
+            self._lock.release()
+            self._lock = None
+
     @property
+    @_serialized_session
     def is_open(self) -> bool:
         return self._key is not None
 
+    @_serialized_session
     def verify_master_password(self, candidate: str) -> bool:
         """Reauthenticate the current session without opening a second vault session."""
         key, salt, fingerprint = self._key, self._salt, self._fingerprint
@@ -302,6 +353,7 @@ class VaultSession:
         return (self.is_open and self._key is key and self._fingerprint == fingerprint
                 and hmac.compare_digest(derived, key))
 
+    @_serialized_session
     def lockout_lab_key(self) -> bytes:
         """Derive a separate key while the authenticated vault session is unlocked."""
         if not self.is_open:
@@ -312,6 +364,7 @@ class VaultSession:
         return HKDF(algorithm=hashes.SHA256(), length=32, salt=self._salt,
                     info=b"Nasolt Vault Lockout Lab sidecar v1").derive(self._key)
 
+    @_serialized_session
     def hello_enrollment_key(self) -> bytes:
         """Separate integrity key for optional, nonsecret Hello enrollment metadata."""
         if not self.is_open:
@@ -322,6 +375,7 @@ class VaultSession:
         return HKDF(algorithm=hashes.SHA256(), length=32, salt=self._salt,
                     info=b"Nasolt Vault Hello enrollment v1").derive(self._key)
 
+    @_serialized_session
     def matches_disk(self) -> bool:
         """Reject reauth if the encrypted vault changed since this session opened."""
         if not self.is_open or self._fingerprint is None:
@@ -334,17 +388,22 @@ class VaultSession:
 
     def open(self, master_password: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Decrypt the vault. Raises ValueError on a wrong password / corrupt file."""
-        self._acquire()
-        try:
-            with open(VAULT_FILE, "rb") as f:
-                raw = f.read()
-            entries, groups, key, salt = _read_valid(raw, master_password)
-            self._key, self._salt, self._fingerprint = key, salt, _digest(raw)
-            return entries, groups
-        except BaseException:
-            self.close()
-            raise
+        ticket = self._open_ticket()
+        with self._state_lock:
+            self._check_open_ticket(ticket)
+            self._acquire()
+            try:
+                with open(VAULT_FILE, "rb") as f:
+                    raw = f.read()
+                entries, groups, key, salt = _read_valid(raw, master_password)
+                self._check_open_ticket(ticket)
+                self._key, self._salt, self._fingerprint = key, salt, _digest(raw)
+                return entries, groups
+            except BaseException:
+                self._close_locked()
+                raise
 
+    @_serialized_opening
     def create(self, master_password: str, *, replace_existing: bool = True) -> None:
         """Create an empty vault, preserving any previous encrypted primary first."""
         self._acquire()
@@ -365,9 +424,10 @@ class VaultSession:
             _atomic_replace(blob, VAULT_FILE)
             self._key, self._salt, self._fingerprint = key, salt, _digest(blob)
         except BaseException:
-            self.close()
+            self._close_locked()
             raise
 
+    @_serialized_session
     def save(self, entries: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> None:
         if not self.is_open:
             raise RuntimeError("Vault is locked")
@@ -398,6 +458,7 @@ class VaultSession:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
+    @_serialized_opening
     def recover_from_backup(self, master_password: str, *, confirmed: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Explicit recovery only; preserve the old primary before replacing it."""
         if not confirmed:
@@ -425,16 +486,20 @@ class VaultSession:
             self._key, self._salt, self._fingerprint = key, salt, _digest(backup)
             return entries, groups
         except BaseException:
-            self.close()
+            self._close_locked()
             raise
 
     def close(self) -> None:
-        self._key = None
-        self._salt = None
-        self._fingerprint = None
-        if self._lock is not None:
-            self._lock.release()
-            self._lock = None
+        # Revoke at invocation, before waiting for a worker holding _state_lock.
+        with self._revocation_lock:
+            self._generation += 1
+            self._pending_closes += 1
+        try:
+            with self._state_lock:
+                self._close_locked()
+        finally:
+            with self._revocation_lock:
+                self._pending_closes -= 1
 
     def __del__(self) -> None:
         if getattr(self, "_lock", None) is not None:

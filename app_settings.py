@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import Any, Dict
 
 from paths import data_dir
@@ -41,15 +42,26 @@ def load_settings() -> Dict[str, Any]:
 
 
 def save_settings(settings: Dict[str, Any]) -> None:
+    tmp = None
     try:
-        os.makedirs(os.path.dirname(settings_file()), exist_ok=True)
-        tmp = settings_file() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        target = settings_file()
+        folder = os.path.dirname(target)
+        os.makedirs(folder, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".nasolt-settings-", suffix=".tmp", dir=folder)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump({key: value for key, value in settings.items()
                        if key != "voicekey_shortcut"}, f, indent=2)
-        os.replace(tmp, settings_file())
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
     except OSError:
         pass  # preferences are best-effort; never crash the app over them
+    finally:
+        if tmp is not None and os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def get(key: str, default: Any = None) -> Any:

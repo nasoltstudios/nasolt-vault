@@ -190,6 +190,36 @@ class QuickAccessGuiTests(unittest.TestCase):
         self.assertFalse(self.app.session.is_open)
         self.assertIsNone(qa.summon_popup)
 
+    def test_cancel_locked_auth_while_worker_is_decrypting(self):
+        import vault
+        self.app.shell.lock()
+        qa = self.app.quick_access
+        ident = qa.request_normal()
+        entered, release = threading.Event(), threading.Event()
+        original = vault._read_valid
+
+        def delayed(*args):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("synthetic unlock gate timed out")
+            return original(*args)
+
+        with mock.patch.object(vault, "_read_valid", side_effect=delayed):
+            qa._verify_async(ident, "Synthetic-only-master-42!")
+            self.assertTrue(entered.wait(5))
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+            try:
+                qa.cancel_request(ident)
+            finally:
+                release.set()
+                timer.join(5)
+            qa._auth_worker.join(5)
+        qa._process_auth_results()
+        self.assertFalse(self.app.session.is_open)
+        self.assertIsNone(self.app.shell)
+        self.assertIsNone(qa.request)
+
     def test_changed_vault_file_revokes_summon_access(self):
         import vault
         qa = self.authenticate_summon()

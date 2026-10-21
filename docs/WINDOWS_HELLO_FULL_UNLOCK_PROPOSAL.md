@@ -1,0 +1,5 @@
+# Future design proposal: Windows Hello full unlock
+
+**UNIMPLEMENTED.** The current Windows Hello feature only reauthenticates an already-unlocked vault session. A fully locked vault always requires the master password. No key-wrapping material is stored by this proposal.
+
+A future design would need a per-device, user-presence-protected wrapping key backed by a vetted Windows facility, authenticated binding to the exact vault identity and format, a clear enrollment flow requiring the master password, and explicit revocation and recovery behavior. It must distinguish Windows consent from possession of the vault decryption key. Master-password changes, vault replacement, restore from backup, Windows account migration, device reset, and cloned files must fail safely without losing the master-password path. The wrapped key would require its own versioned format and threat-model review, with synthetic compatibility and failure-injection tests before opt-in deployment. It must never silently convert existing vaults or treat a Hello gesture alone as proof of access to the NSLT key.

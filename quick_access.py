@@ -182,6 +182,8 @@ class QuickAccess:
                 outcome, result = "rejected", None
             except vault.VaultBusyError:
                 outcome, result = "busy", None
+            except vault.VaultOperationCancelled:
+                outcome, result = "canceled", None
             except vault.VaultFormatError:
                 outcome, result = "damaged", None
             except Exception as exc:
@@ -228,8 +230,6 @@ class QuickAccess:
             request = self.request
             if (request is None or request.ident != ident or request.epoch != epoch
                     or epoch != self._epoch or request.state != "pending"):
-                if outcome == "opened" and self.app.shell is None:
-                    self.app.session.close()
                 continue
             if outcome == "opened" and request.await_login:
                 if self.reauth_prompt is not None:
@@ -317,6 +317,9 @@ class QuickAccess:
         self._drop_request()
 
     def _drop_request(self):
+        request = self.request
+        if request is not None and request.state == "pending" and request.await_login:
+            self.app.session.close()
         if self._hello_cancel is not None:
             self._hello_cancel.set()
             self._hello_cancel = None

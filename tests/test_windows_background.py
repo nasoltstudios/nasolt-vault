@@ -53,7 +53,7 @@ class InstanceTests(unittest.TestCase):
             second.close()
 
     def test_uninstaller_removes_startup_registration_and_links(self):
-        source = (Path(__file__).resolve().parents[1] / "installer" / "NasoltVault.nsi").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parents[1] / "packaging" / "windows" / "NasoltVault.nsi").read_text(encoding="utf-8")
         uninstall = source.split('Section "Uninstall"', 1)[1]
         self.assertNotIn('DeleteRegValue HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "Nasolt Vault"', uninstall)
         self.assertIn('ExecWait \'"$INSTDIR\\${EXE}" --unregister-startup\'', uninstall)
@@ -174,15 +174,31 @@ class BackgroundProcessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="nasolt_process_") as folder:
             env = os.environ.copy()
             env["NASOLT_DATA_DIR"] = folder
+            # A Windows venv python.exe may be a redirector with a different
+            # PID than the interpreter that owns the native tray window.
+            marker = Path(folder, "test-process-id")
+            launcher = Path(folder, "launch-synthetic.py")
+            launcher.write_text(
+                "import os, runpy, sys\n"
+                "from pathlib import Path\n"
+                "Path(os.environ['NASOLT_TEST_PID_FILE']).write_text(str(os.getpid()))\n"
+                "sys.argv = [os.environ['NASOLT_TEST_MAIN'], '--background']\n"
+                "sys.path.insert(0, str(Path(sys.argv[0]).parent))\n"
+                "runpy.run_path(sys.argv[0], run_name='__main__')\n",
+                encoding="utf-8")
+            env["NASOLT_TEST_PID_FILE"] = str(marker)
+            env["NASOLT_TEST_MAIN"] = main
             for _ in range(2):
-                process = subprocess.Popen([sys.executable, main, "--background"], env=env,
+                marker.unlink(missing_ok=True)
+                process = subprocess.Popen([sys.executable, str(launcher)], env=env,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            creationflags=subprocess.CREATE_NO_WINDOW)
                 try:
                     deadline = time.monotonic() + 12
                     hwnd = None
                     while time.monotonic() < deadline:
-                        hwnd = user32.FindWindowW(f"NasoltVaultTray_{process.pid}", None)
+                        if marker.is_file():
+                            hwnd = user32.FindWindowW(f"NasoltVaultTray_{marker.read_text()}", None)
                         if hwnd or process.poll() is not None:
                             break
                         time.sleep(0.05)
