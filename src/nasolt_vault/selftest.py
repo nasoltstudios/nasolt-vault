@@ -24,11 +24,17 @@ APP_MODULES = ["paths", "crypto", "vault", "export", "generators", "clipboard", 
                "lockout_lab", "ui.lockout_lab_page", "quick_access", "windows_shortcuts",
                "ui.summon_popup", "ui.reauth_prompt", "instance",
                "windows_startup", "windows_tray", "windows_focus", "windows_hello",
-               "hello_enrollment"]
+               "hello_enrollment", "installer_migration", "installer_shortcuts", "installer_upgrade"]
 ASSETS = [("assets", "app.ico"), ("assets", "app.png"),
           ("assets", "app_icons", "nasolt-vault-16.png"), ("assets", "app_icons", "nasolt-vault-512.png"),
           ("assets", "brands.json"), ("assets", "icons", "lock.png"),
           ("assets", "icons", "search.png")]
+BUNDLED_NOTICES = [("notices", "THIRD_PARTY_NOTICES.md"), ("notices", "MIT.txt"),
+                   ("notices", "licenses", "Python-3.12.3", "LICENSE.txt"),
+                   ("notices", "licenses", "Roboto-fonts", "NOTICE.txt"),
+                   ("notices", "licenses", "Tcl-8.6.13", "license.terms"),
+                   ("notices", "licenses", "Tk-8.6", "license.terms"),
+                   ("notices", "licenses", "NSIS-3.11", "COPYING")]
 
 
 def run() -> int:
@@ -62,7 +68,7 @@ def run() -> int:
 
     try:
         from .paths import resource_path
-        for parts in ASSETS:
+        for parts in ASSETS + (BUNDLED_NOTICES if getattr(sys, "frozen", False) else []):
             p = resource_path(*parts)
             if not os.path.isfile(p):
                 fail("bundled file missing: " + "/".join(parts))

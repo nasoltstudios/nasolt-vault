@@ -1,0 +1,9 @@
+CustomTkinter 6.0.0 bundles Roboto-Regular.ttf and Roboto-Medium.ttf.
+The embedded font name tables identify them as:
+
+Copyright 2011 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0.
+
+The Apache 2.0 terms are in LICENSE-APACHE-2.0.txt in this directory.
+The bundled CustomTkinter_shapes_font.otf is distributed with CustomTkinter;
+its separate provenance should be confirmed before binary distribution.
