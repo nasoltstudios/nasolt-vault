@@ -9,14 +9,14 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 # Set this before importing vault, whose default path is resolved at import time.
 _IMPORT_HOME = tempfile.TemporaryDirectory(prefix="nasolt_test_import_", dir=ROOT / "tests")
 os.environ["NASOLT_DATA_DIR"] = _IMPORT_HOME.name
 
-import crypto  # noqa: E402
-import export  # noqa: E402
-import vault  # noqa: E402
+from nasolt_vault import crypto  # noqa: E402
+from nasolt_vault import export  # noqa: E402
+from nasolt_vault import vault  # noqa: E402
 
 
 MASTER = "synthetic-master-password-only"

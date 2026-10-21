@@ -13,7 +13,7 @@ from unittest import mock
 
 class StartupDiagnosticsTests(unittest.TestCase):
     def test_startup_error_reports_phase_without_exception_value(self):
-        import main
+        from nasolt_vault import main
 
         captured = io.StringIO()
         with mock.patch.object(main, "setup_logging"), \
@@ -32,8 +32,8 @@ class GuiStartupTests(unittest.TestCase):
     def test_quick_login_swap_cancels_pending_callbacks(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_gui_callbacks_", dir=Path(__file__).parent) as temp:
             with mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": temp}):
-                import vault
-                from main import App
+                from nasolt_vault import vault
+                from nasolt_vault.main import App
 
                 with mock.patch.multiple(vault, VAULT_DIR=temp, VAULT_FILE=str(Path(temp) / "vault.enc")):
                     app = App()
@@ -54,8 +54,8 @@ class GuiStartupTests(unittest.TestCase):
     def test_login_window_visible_and_interactive_after_mainloop_starts(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_gui_startup_", dir=Path(__file__).parent) as temp:
             with mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": temp}):
-                import vault
-                from main import App
+                from nasolt_vault import vault
+                from nasolt_vault.main import App
 
                 with mock.patch.multiple(vault, VAULT_DIR=temp, VAULT_FILE=str(Path(temp) / "vault.enc")):
                     app = App()
@@ -77,8 +77,8 @@ class GuiStartupTests(unittest.TestCase):
     def test_login_controls_create_lock_and_reopen_synthetic_vault(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_gui_login_", dir=Path(__file__).parent) as temp:
             with mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": temp}):
-                import vault
-                from main import App
+                from nasolt_vault import vault
+                from nasolt_vault.main import App
 
                 with mock.patch.multiple(vault, VAULT_DIR=temp, VAULT_FILE=str(Path(temp) / "vault.enc")):
                     app = App()

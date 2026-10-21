@@ -8,7 +8,7 @@ Unicode True
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NasoltVault"
 
 Name "${APPNAME}"
-OutFile "..\..\artifacts\windows\installer\Nasolt_Vault_Setup_${APPVER}.exe"
+OutFile "artifacts\installer\Nasolt_Vault_Setup_${APPVER}.exe"
 InstallDir "$LOCALAPPDATA\Programs\${APPNAME}"
 InstallDirRegKey HKCU "Software\NasoltVault" "InstallDir"
 RequestExecutionLevel user                      ; per-user install: no administrator rights needed
@@ -24,8 +24,8 @@ VIAddVersionKey /LANG=1033 "FileVersion" "${APPVER}"
 VIAddVersionKey /LANG=1033 "ProductVersion" "${APPVER}"
 
 !include "MUI2.nsh"
-!define MUI_ICON   "..\..\assets\app.ico"
-!define MUI_UNICON "..\..\assets\app.ico"
+!define MUI_ICON   "..\..\src\nasolt_vault\assets\app.ico"
+!define MUI_UNICON "..\..\src\nasolt_vault\assets\app.ico"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TEXT "This will install ${APPNAME} ${APPVER} on your computer.$\r$\n$\r$\nInstalled vaults normally live in:$\r$\n%APPDATA%\Nasolt Vault\data$\r$\n$\r$\nAn existing vault beside the program continues to be used. Updating keeps your vault files. Click Next to continue."
 
@@ -65,7 +65,7 @@ Section "${APPNAME} (required)" SecMain
   ; plus the previous install marker and HKCU registration for upgrades.
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
-  File /oname=NasoltShortcutCheck.exe "..\..\artifacts\windows\dist\${EXE}"
+  File /oname=NasoltShortcutCheck.exe "artifacts\dist\${EXE}"
   ClearErrors
   ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-shortcuts check-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
   IfErrors main_shortcut_conflict
@@ -75,7 +75,7 @@ Section "${APPNAME} (required)" SecMain
     Abort
   main_shortcuts_checked:
   SetOutPath "$INSTDIR"
-  File "..\..\artifacts\windows\dist\${EXE}"
+  File "artifacts\dist\${EXE}"
   File "installed.flag"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 

@@ -76,8 +76,8 @@ class IntegrityRecoveryTests(unittest.TestCase):
         owner = vault.VaultSession()
         self.addCleanup(owner.close)
         owner.create(MASTER)
-        env = dict(os.environ, NASOLT_DATA_DIR=self.temp.name)
-        script = ("import vault,sys; s=vault.VaultSession(); "
+        env = dict(os.environ, NASOLT_DATA_DIR=self.temp.name, PYTHONPATH=str(ROOT / "src"))
+        script = ("from nasolt_vault import vault; import sys; s=vault.VaultSession(); "
                   "\ntry: s.open('synthetic-master-password-only')\n"
                   "except vault.VaultBusyError: sys.exit(7)\n"
                   "else: s.close(); sys.exit(0)")
@@ -87,11 +87,11 @@ class IntegrityRecoveryTests(unittest.TestCase):
         owner.close()
 
         marker = Path(self.temp.name, "child-ready")
-        hold_script = ("import vault,time,pathlib; s=vault.VaultSession(); "
+        hold_script = ("from nasolt_vault import vault; import time,pathlib; s=vault.VaultSession(); "
                        "s.open('synthetic-master-password-only'); "
                        "pathlib.Path('child-ready').write_text('ready'); time.sleep(30)")
         child = subprocess.Popen([sys.executable, "-c", hold_script], cwd=self.temp.name,
-                                 env={**env, "PYTHONPATH": str(ROOT)}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                 env={**env, "PYTHONPATH": str(ROOT / "src")}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             deadline = time.monotonic() + 10
             while not marker.exists() and child.poll() is None and time.monotonic() < deadline:

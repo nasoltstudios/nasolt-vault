@@ -12,10 +12,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import quick_access
-import app_settings
-import hello_enrollment
-from windows_shortcuts import SHORTCUTS, WindowsHotkeys
+from nasolt_vault import quick_access
+from nasolt_vault import app_settings
+from nasolt_vault import hello_enrollment
+from nasolt_vault.windows_shortcuts import SHORTCUTS, WindowsHotkeys
 
 
 class ShortcutAndSearchTests(unittest.TestCase):
@@ -58,8 +58,8 @@ class QuickAccessGuiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="nasolt_quick_", dir=Path(__file__).parent)
         self.env = mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": self.temp.name})
         self.env.start()
-        import vault
-        from main import App
+        from nasolt_vault import vault
+        from nasolt_vault.main import App
         self.paths = mock.patch.multiple(vault, VAULT_DIR=self.temp.name,
                                          VAULT_FILE=str(Path(self.temp.name) / "vault.enc"))
         self.paths.start()
@@ -191,7 +191,7 @@ class QuickAccessGuiTests(unittest.TestCase):
         self.assertIsNone(qa.summon_popup)
 
     def test_cancel_locked_auth_while_worker_is_decrypting(self):
-        import vault
+        from nasolt_vault import vault
         self.app.shell.lock()
         qa = self.app.quick_access
         ident = qa.request_normal()
@@ -221,7 +221,7 @@ class QuickAccessGuiTests(unittest.TestCase):
         self.assertIsNone(qa.request)
 
     def test_changed_vault_file_revokes_summon_access(self):
-        import vault
+        from nasolt_vault import vault
         qa = self.authenticate_summon()
         vault_path = Path(self.temp.name) / "vault.enc"
         with vault_path.open("ab") as changed:
@@ -315,7 +315,7 @@ class QuickAccessGuiTests(unittest.TestCase):
         self.assertIsNone(qa.summon_popup)
 
     def test_settings_enrollment_requires_master_and_native_verification(self):
-        import ui.settings_page as settings_page
+        from nasolt_vault.ui import settings_page
         self.app.shell.navigate("settings")
         page = self.app.shell.pages["settings"]
         with mock.patch.object(settings_page, "master_password_prompt",
@@ -373,7 +373,7 @@ class QuickAccessGuiTests(unittest.TestCase):
             self.assertFalse(self.app.session.is_open)
 
     def test_settings_can_disable_and_reenable_per_user_startup(self):
-        import ui.settings_page as settings_page
+        from nasolt_vault.ui import settings_page
         self.app.shell.navigate("settings")
         page = self.app.shell.pages["settings"]
         with mock.patch.object(settings_page, "sync_startup", return_value="disabled") as startup:

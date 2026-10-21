@@ -19,7 +19,11 @@ jobs:
           python-version: '3.12'
       - name: Install pinned runtime dependencies
         shell: pwsh
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install -r packaging/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps -e src
+          exit $LASTEXITCODE
       - name: Run synthetic source checks
         shell: pwsh
         run: |
@@ -29,7 +33,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -q
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m compileall -q .
+          python -m compileall -q -x '(artifacts|[.]venv)' src/nasolt_vault tests packaging
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python main.py --selftest
+          python -m nasolt_vault --selftest
           exit $LASTEXITCODE

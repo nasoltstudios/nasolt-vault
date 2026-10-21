@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nasolt-vault"
+version = "2.0.0"
+description = "Offline encrypted password manager for Windows"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+
+[tool.setuptools]
+packages = ["nasolt_vault", "nasolt_vault.ui"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+nasolt_vault = ["assets/*", "assets/icons/*", "assets/app_icons/*", "assets/brands/*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "__pycache__/*"]

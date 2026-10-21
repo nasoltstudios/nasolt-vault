@@ -16,8 +16,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="nasolt_ui_integrity_", dir=Path(__file__).parent)
         self.env = mock.patch.dict(os.environ, {"NASOLT_DATA_DIR": self.temp.name})
         self.env.start()
-        import vault
-        from main import App
+        from nasolt_vault import vault
+        from nasolt_vault.main import App
 
         self.vault_paths = mock.patch.multiple(vault, VAULT_DIR=self.temp.name,
                                                VAULT_FILE=str(Path(self.temp.name) / "vault.enc"))
@@ -35,7 +35,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_failed_saves_do_not_claim_success_or_discard_edits(self):
-        from ui.entry_dialog import EntryDialog
+        from nasolt_vault.ui.entry_dialog import EntryDialog
 
         shell = self.app.shell
         with mock.patch.object(shell, "_persist", return_value=False):
@@ -81,8 +81,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertFalse(self.app.session.is_open)
 
     def test_menu_bar_add_entry_opens_dialog_from_another_page(self):
-        from ui.entry_dialog import EntryDialog
-        from ui.modal import Modal
+        from nasolt_vault.ui.entry_dialog import EntryDialog
+        from nasolt_vault.ui.modal import Modal
 
         shell = self.app.shell
         shell.navigate("settings")
@@ -104,10 +104,10 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(seen, {"page": "vault", "dialog": True})
 
     def test_reopen_same_synthetic_vault_and_logo_cache(self):
-        from main import App
-        import app_settings
+        from nasolt_vault.main import App
+        from nasolt_vault import app_settings
         import customtkinter as ctk
-        import icons
+        from nasolt_vault import icons
 
         self.assertTrue(self.app.shell.add_entry({"title": "Synthetic reopen", "password": "fake-only"}))
         first = icons.avatar_image("Atlas")
@@ -130,7 +130,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertFalse(hasattr(self.app.shell.pages["settings"], "theme_dd"))
 
     def test_xp_vault_row_and_transfer_at_minimum_window_size(self):
-        from ui.vault_page import MASK
+        from nasolt_vault.ui.vault_page import MASK
 
         self.app.geometry("980x620")
         shell = self.app.shell
@@ -153,8 +153,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertTrue(transfer.file_lbl.winfo_exists())
 
     def test_encrypted_transfer_uses_password_and_authenticates_before_preview(self):
-        import export
-        import ui.transfer_page as transfer_module
+        from nasolt_vault import export
+        from nasolt_vault.ui import transfer_page as transfer_module
 
         shell = self.app.shell
         self.assertTrue(shell.add_entry({"title": "Synthetic export", "password": "fictional-entry-value"}))
@@ -183,8 +183,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(len(shell.entries), 1)
 
     def test_new_entry_shows_offline_account_icon_preview(self):
-        import icons
-        from ui.entry_dialog import EntryDialog
+        from nasolt_vault import icons
+        from nasolt_vault.ui.entry_dialog import EntryDialog
 
         self.assertEqual(icons.match_brand("GitHub", ""), "github")
         self.assertIsNotNone(icons.brand_image("github", 24))
@@ -215,8 +215,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(control.get(), 64)
 
     def test_export_password_modal_confirms_and_collects_masked_value(self):
-        from ui.modal import Modal, export_password_prompt
-        from ui.widgets import Field
+        from nasolt_vault.ui.modal import Modal, export_password_prompt
+        from nasolt_vault.ui.widgets import Field
 
         value = "synthetic-export-passphrase-42"
         seen = {}
@@ -244,7 +244,7 @@ class UiIntegrityTests(unittest.TestCase):
 
     def test_pending_animation_is_cancelled_when_control_closes(self):
         import customtkinter as ctk
-        from ui.anim import animate
+        from nasolt_vault.ui.anim import animate
 
         control = ctk.CTkFrame(self.app.shell.page_host)
         control.pack()
@@ -267,7 +267,7 @@ class UiIntegrityTests(unittest.TestCase):
 
     def test_destroyed_tooltip_cancels_its_delay(self):
         import customtkinter as ctk
-        from ui.widgets import Tooltip
+        from nasolt_vault.ui.widgets import Tooltip
 
         control = ctk.CTkLabel(self.app.shell.page_host, text="Synthetic tip")
         control.pack()
@@ -278,7 +278,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertNotIn(job, self.app.tk.call("after", "info"))
 
     def test_quickly_closed_dialog_cancels_delayed_tk_callbacks(self):
-        from ui.modal import Modal
+        from nasolt_vault.ui.modal import Modal
 
         dialog = Modal(self.app, "Synthetic dialog", 320, 180)
         dialog.present()
@@ -293,8 +293,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertFalse(owned_jobs())
 
     def test_modal_action_buttons_are_inside_the_visible_dialog(self):
-        from ui.modal import Modal, alert, confirm, export_password_prompt, master_password_prompt, prompt
-        from ui.widgets import Btn
+        from nasolt_vault.ui.modal import Modal, alert, confirm, export_password_prompt, master_password_prompt, prompt
+        from nasolt_vault.ui.widgets import Btn
 
         cases = (
             (lambda: master_password_prompt(self.app), {"Continue", "Cancel"}),
@@ -328,8 +328,8 @@ class UiIntegrityTests(unittest.TestCase):
             self.assertTrue(all(observed.values()), observed)
 
     def test_hello_enrollment_master_prompt_continue_button_submits(self):
-        from ui.modal import Modal, master_password_prompt
-        from ui.widgets import Btn, Field
+        from nasolt_vault.ui.modal import Modal, master_password_prompt
+        from nasolt_vault.ui.widgets import Btn, Field
 
         observed = {}
 
@@ -352,7 +352,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(result, "Synthetic-only-master-42!")
 
     def test_xp_scrollbar_only_when_list_overflows(self):
-        import vault
+        from nasolt_vault import vault
 
         self.app.geometry("980x620")
         shell = self.app.shell
@@ -373,8 +373,8 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertFalse(page.body._scrollbar.winfo_ismapped())
 
     def test_xp_menu_shortcut_and_keyboard_navigation(self):
-        from ui.widgets import Popup, open_menu
-        from ui import theme as T
+        from nasolt_vault.ui.widgets import Popup, open_menu
+        from nasolt_vault.ui import theme as T
 
         shell = self.app.shell
         self.app.focus_force()
@@ -417,7 +417,7 @@ class UiIntegrityTests(unittest.TestCase):
     def test_xp_task_header_uses_light_palette(self):
         import tkinter
         import customtkinter as ctk
-        from ui import theme as T
+        from nasolt_vault.ui import theme as T
 
         shell = self.app.shell
         tasks = shell.nav_items["vault"].master.master
@@ -427,7 +427,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(ctk.get_appearance_mode(), "Light")
 
     def test_xp_command_button_face_and_hover_from_text(self):
-        from ui import theme as T
+        from nasolt_vault.ui import theme as T
 
         button = self.app.shell.add_entry_button
         self.assertEqual(button.cget("fg_color"), T.BUTTON_FACE)
@@ -462,7 +462,7 @@ class UiIntegrityTests(unittest.TestCase):
         if sys.platform != "win32" or sys.getwindowsversion().build < 22000:
             self.skipTest("Windows 11 native frame attribute")
         import ctypes
-        from ui import theme as T
+        from nasolt_vault.ui import theme as T
 
         self.assertTrue(T.style_native_window(self.app))
         user32 = ctypes.WinDLL("user32")
@@ -478,7 +478,7 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertEqual(corners.value, 1)
 
     def test_xp_dropdown_can_be_used_from_keyboard(self):
-        from ui.widgets import Popup
+        from nasolt_vault.ui.widgets import Popup
 
         shell = self.app.shell
         dropdown = shell.pages["vault"].filter_dd
@@ -496,9 +496,9 @@ class UiIntegrityTests(unittest.TestCase):
         self.assertIsNone(Popup.current)
 
     def test_dialog_dropdown_enter_does_not_save_entry(self):
-        from ui.entry_dialog import EntryDialog
-        from ui.widgets import Btn, Popup
-        import vault
+        from nasolt_vault.ui.entry_dialog import EntryDialog
+        from nasolt_vault.ui.widgets import Btn, Popup
+        from nasolt_vault import vault
 
         group = vault.add_group([], "Synthetic group")
         save = mock.Mock(return_value=True)
@@ -541,7 +541,7 @@ class UiIntegrityTests(unittest.TestCase):
 
     def test_xp_buttons_activate_once_from_keyboard(self):
         import customtkinter as ctk
-        from ui.widgets import Btn, IconBtn
+        from nasolt_vault.ui.widgets import Btn, IconBtn
 
         calls = []
         host = ctk.CTkFrame(self.app.shell.page_host, width=260, height=90)

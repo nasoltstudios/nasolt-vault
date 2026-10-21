@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import installer_migration as migration
-from crypto import build_vault_blob, derive_key, encrypt_aes_gcm
+from nasolt_vault import installer_migration as migration
+from nasolt_vault.crypto import build_vault_blob, derive_key, encrypt_aes_gcm
 
 
 class MigrationTests(unittest.TestCase):

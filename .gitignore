@@ -3,6 +3,11 @@ __pycache__/
 .venv/
 .venv-test/
 .venv-build/
+.venv*/
+*.egg-info/
+*.dist-info/
+*.whl
+*.tar.gz
 artifacts/
 build/
 dist/
