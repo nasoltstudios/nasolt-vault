@@ -66,6 +66,22 @@ Section "${APPNAME} (required)" SecMain
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File /oname=NasoltShortcutCheck.exe "artifacts\dist\${EXE}"
+  File /oname=installed.flag "installed.flag"
+  WriteUninstaller "$PLUGINSDIR\Uninstall.exe"
+  IfErrors main_stage_failed
+  ; A previous setup may have stopped after replacing one program file.
+  ; Its journal and verified local copies restore the previous working pair.
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade recover "$INSTDIR"' $0
+  IfErrors main_recovery_failed
+  StrCmp $0 0 main_recovered main_recovery_failed
+  main_stage_failed:
+    MessageBox MB_OK|MB_ICONSTOP "Setup could not prepare its program files. Nothing was changed in the installation folder." /SD IDOK
+    Abort
+  main_recovery_failed:
+    MessageBox MB_OK|MB_ICONSTOP "An interrupted installation could not be safely recovered. Existing program and vault files were preserved. Inspect the installation folder and retry from a backup." /SD IDOK
+    Abort
+  main_recovered:
   ClearErrors
   ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-shortcuts check-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
   IfErrors main_shortcut_conflict
@@ -74,20 +90,31 @@ Section "${APPNAME} (required)" SecMain
     MessageBox MB_OK|MB_ICONSTOP "A Nasolt Vault Start Menu shortcut cannot be verified as belonging to this installation. Setup stopped before changing program files or shortcuts. Resolve the conflicting shortcut and retry." /SD IDOK
     Abort
   main_shortcuts_checked:
-  SetOutPath "$INSTDIR"
-  File "artifacts\dist\${EXE}"
-  File "installed.flag"
-  WriteUninstaller "$INSTDIR\Uninstall.exe"
-
+  ; A custom install path may already contain unrelated files. Do not copy
+  ; over them unless the marker, program files and HKCU registration identify
+  ; an existing installation in this exact folder.
   ClearErrors
-  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts install-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
-  IfErrors main_shortcut_install_failed
-  StrCmp $0 0 main_shortcut_install_done main_shortcut_install_failed
-  main_shortcut_install_failed:
-    MessageBox MB_OK|MB_ICONSTOP "Nasolt Vault could not create or verify its Start Menu shortcuts. Setup stopped; existing shortcuts were preserved." /SD IDOK
+  ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-shortcuts check-install-dir "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors main_install_dir_conflict
+  StrCmp $0 0 main_install_dir_checked main_install_dir_conflict
+  main_install_dir_conflict:
+    MessageBox MB_OK|MB_ICONSTOP "The selected installation folder contains files that cannot be verified as this Nasolt Vault installation. Setup stopped before copying program files. Choose an empty folder or resolve the existing installation." /SD IDOK
     Abort
-  main_shortcut_install_done:
+  main_install_dir_checked:
+  ; Stage and hash the new pair beside the installed files. Keep verified old
+  ; copies until the registration is written, so retry can undo interruption.
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade install "$INSTDIR" "$PLUGINSDIR"' $0
+  IfErrors main_copy_failed
+  StrCmp $0 0 main_files_ready main_copy_failed
+  main_copy_failed:
+    MessageBox MB_OK|MB_ICONSTOP "Setup could not install and verify program files. The previous application was restored when possible. Vault data was not touched. Retry setup after checking available space and access permissions." /SD IDOK
+    Abort
+  main_files_ready:
 
+  ; A verified executable and uninstaller are now in place. The transaction
+  ; remains recoverable until HKCU registration and the marker are verified.
+  ClearErrors
   WriteRegStr   HKCU "Software\NasoltVault" "InstallDir" "$INSTDIR"
   WriteRegStr   HKCU "${UNINSTKEY}" "DisplayName"     "${APPNAME}"
   WriteRegStr   HKCU "${UNINSTKEY}" "DisplayVersion"  "${APPVER}"
@@ -97,6 +124,27 @@ Section "${APPNAME} (required)" SecMain
   WriteRegStr   HKCU "${UNINSTKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKCU "${UNINSTKEY}" "NoModify" 1
   WriteRegDWORD HKCU "${UNINSTKEY}" "NoRepair" 1
+  IfErrors main_registration_failed
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade finalize "$INSTDIR"' $0
+  IfErrors main_registration_failed
+  StrCmp $0 0 main_registration_done main_registration_failed
+  main_registration_failed:
+    ClearErrors
+    ExecWait '"$PLUGINSDIR\NasoltShortcutCheck.exe" --installer-upgrade rollback "$INSTDIR"' $0
+    MessageBox MB_OK|MB_ICONSTOP "Setup could not verify installation registration. It attempted to restore the previous program. Vault data was not touched; inspect the installation folder before retrying." /SD IDOK
+    Abort
+  main_registration_done:
+  ; Shortcut creation happens after commit. If it fails, the verified program
+  ; still opens from its installed folder and setup can be safely retried.
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts install-main "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors main_shortcut_install_failed
+  StrCmp $0 0 main_shortcut_install_done main_shortcut_install_failed
+  main_shortcut_install_failed:
+    MessageBox MB_OK|MB_ICONSTOP "Nasolt Vault was installed, but its Start Menu shortcuts could not be completed. The application remains in the installation folder. Resolve the shortcut conflict and retry setup." /SD IDOK
+    Abort
+  main_shortcut_install_done:
 
   ; --- offer to bring an existing vault (from the portable version) into the installed copy ---
   ; paths.py deliberately keeps using an existing vault beside the installed exe.
@@ -169,6 +217,16 @@ Section "Uninstall"
   IfFileExists "$INSTDIR\installed.flag" +3 0
     MessageBox MB_OK|MB_ICONSTOP "The installation marker is missing. Uninstallation stopped to avoid deleting files from an unexpected folder." /SD IDOK
     Abort
+  ; Do not remove shortcuts, program files or HKCU values unless this folder
+  ; and the uninstall registration agree on the installation being removed.
+  ClearErrors
+  ExecWait '"$INSTDIR\${EXE}" --installer-shortcuts check-uninstall "$INSTDIR" "$SMPROGRAMS" "$DESKTOP"' $0
+  IfErrors uninstall_registration_conflict
+  StrCmp $0 0 uninstall_registration_checked uninstall_registration_conflict
+  uninstall_registration_conflict:
+    MessageBox MB_OK|MB_ICONSTOP "Uninstallation stopped because the program folder or HKCU uninstall registration could not be verified. No shortcuts, program files or vault data were removed." /SD IDOK
+    Abort
+  uninstall_registration_checked:
   ; Refuse uninstall before removing any files if a fixed-name shortcut is
   ; foreign, unreadable or changed. Other Start Menu contents are preserved.
   ClearErrors
@@ -185,7 +243,8 @@ Section "Uninstall"
   IfErrors shortcut_cleanup_failed
   StrCmp $0 0 shortcut_cleanup_done shortcut_cleanup_failed
   shortcut_cleanup_failed:
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Startup shortcuts could not be verified or removed. Check the Nasolt Vault Start Menu folder and remove only links you recognize." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "Startup registration or shortcuts could not be verified or removed. Uninstallation stopped before deleting program files; resolve the conflict and retry." /SD IDOK
+    Abort
   shortcut_cleanup_done:
   Delete "$INSTDIR\${EXE}"
   Delete "$INSTDIR\installed.flag"

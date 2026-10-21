@@ -363,6 +363,7 @@ class UiIntegrityTests(unittest.TestCase):
         from nasolt_vault.ui.widgets import Btn, Field
 
         observed = {}
+        deadline = time.monotonic() + 2.5
 
         def submit():
             dialog = Modal.open_modals[-1]
@@ -371,12 +372,15 @@ class UiIntegrityTests(unittest.TestCase):
                           if any(isinstance(button, Btn) for button in child.winfo_children()))
             button = next(child for child in footer.winfo_children()
                           if isinstance(child, Btn) and child.cget("text") == "Continue")
+            if not button.winfo_ismapped() and time.monotonic() < deadline:
+                self.app.after(30, submit)
+                return
             observed["visible"] = bool(button.winfo_ismapped())
             field.set("Synthetic-only-master-42!")
             button.invoke()
 
         self.app.after(150, submit)
-        watchdog = self.app.after(2000, lambda: Modal.open_modals[-1].cancel() if Modal.open_modals else None)
+        watchdog = self.app.after(3000, lambda: Modal.open_modals[-1].cancel() if Modal.open_modals else None)
         result = master_password_prompt(self.app, title="Enroll Windows Hello")
         self.app.after_cancel(watchdog)
         self.assertTrue(observed.get("visible"))

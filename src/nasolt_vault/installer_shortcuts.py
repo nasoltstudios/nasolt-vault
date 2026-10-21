@@ -40,6 +40,49 @@ def _registered_install_dir() -> str | None:
         return None
 
 
+def _registered_uninstaller() -> str | None:
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, "UninstallString")
+        return value if isinstance(value, str) else None
+    except OSError:
+        return None
+
+
+def _check_install_dir(install_dir: Path, *, uninstall: bool = False) -> None:
+    """Refuse to replace an unrelated folder or remove an unowned install."""
+    if install_dir.is_symlink() or install_dir.is_junction():
+        raise ShortcutConflict("Installation folder is a link")
+    registered = _registered_install_dir()
+    if registered and not _same_path(registered, str(install_dir)):
+        raise ShortcutConflict("A different Nasolt Vault installation is registered")
+    if not install_dir.exists():
+        if uninstall:
+            raise ShortcutConflict("Installation folder is missing")
+        return
+    if not install_dir.is_dir():
+        raise ShortcutConflict("Installation path is not a directory")
+    pending = install_dir / ".nasolt-install-transaction.json"
+    if pending.exists() or pending.is_symlink():
+        raise ShortcutConflict("An installer transaction must be recovered first")
+    if not uninstall and not any(install_dir.iterdir()):
+        return
+    marker = install_dir / "installed.flag"
+    executable = install_dir / EXE
+    uninstaller = install_dir / UNINSTALL
+    if not registered or not _same_path(registered, str(install_dir)):
+        raise ShortcutConflict("Nonempty installation folder is not registered")
+    if any(path.is_symlink() or path.is_junction() or not path.is_file()
+           for path in (marker, executable, uninstaller)):
+        raise ShortcutConflict("Installation marker or program files are missing or linked")
+    command = _registered_uninstaller()
+    if not command or not _same_path(command.strip().strip('"'), str(uninstaller)):
+        raise ShortcutConflict("Uninstall registration does not belong to this folder")
+
+
 def _link_details(link: Path) -> dict[str, str] | None:
     if link.is_symlink() or not link.is_file():
         return None
@@ -139,8 +182,12 @@ def _create(link: Path, target: Path, install_dir: Path) -> None:
 
 
 def manage(mode: str, install_dir: Path, programs_dir: Path, desktop_dir: Path) -> None:
-    if mode not in {"check-main", "install-main", "check-desktop", "install-desktop", "uninstall"}:
+    if mode not in {"check-install-dir", "check-uninstall", "check-main", "install-main",
+                    "check-desktop", "install-desktop", "uninstall"}:
         raise ValueError("Unknown shortcut operation")
+    if mode in {"check-install-dir", "check-uninstall"}:
+        _check_install_dir(install_dir, uninstall=mode == "check-uninstall")
+        return
     links = _check(mode, install_dir, programs_dir, desktop_dir)
     if mode.startswith("check"):
         return
