@@ -157,13 +157,13 @@ class TransferPage(ctk.CTkFrame):
     def _choose(self) -> None:
         path = filedialog.askopenfilename(
             title="Choose a file to import", parent=self.winfo_toplevel(),
-            filetypes=[("Vault exports", "*.nve *.csv *.json"), ("Encrypted Nasolt export", "*.nve"),
+            filetypes=[("Vault exports", "*.nve *.nsv *.csv *.json"), ("Encrypted Nasolt export", "*.nve *.nsv"),
                        ("CSV", "*.csv"), ("JSON", "*.json"), ("All files", "*.*")])
         if not path:
             return
         self._reset_import()
         password = None
-        if os.path.splitext(path)[1].lower() == ".nve":
+        if os.path.splitext(path)[1].lower() in (".nve", ".nsv"):
             password = export_password_prompt(self.winfo_toplevel(), confirm=False)
             if password is None:
                 return
@@ -175,7 +175,9 @@ class TransferPage(ctk.CTkFrame):
             return
         self._rows, self._file = rows, path
         known = {g["name"].lower() for g in self.shell.groups}
-        new_groups = {r["group"].lower() for r in rows if r.get("group") and r["group"].lower() not in known}
+        group_names = [r["group"] for r in rows if r.get("group")]
+        group_names.extend(getattr(rows, "group_names", ()))
+        new_groups = {name.strip().lower() for name in group_names if name.strip() and name.strip().lower() not in known}
         extra = f" · {len(new_groups)} new {'group' if len(new_groups) == 1 else 'groups'}" if new_groups else ""
         self.file_lbl.configure(text=fit_text(f"{os.path.basename(path)} — {len(rows)} {'entry' if len(rows) == 1 else 'entries'}{extra}", T.font(13), 380),
                                 text_color=T.TEXT)
@@ -187,7 +189,13 @@ class TransferPage(ctk.CTkFrame):
         self.import_btn.pack_forget()
 
     def _import(self) -> None:
-        if not self._rows:
+        if self._rows is None:
+            return
+        group_count = len(getattr(self._rows, "group_names", ()))
+        detail = f" and up to {group_count} groups" if group_count else ""
+        if not confirm(self.winfo_toplevel(), "Confirm import",
+                       f"Import {len(self._rows)} entries{detail} into this vault?",
+                       confirm_text="Import"):
             return
         res = self.shell.import_rows(self._rows)
         if res is None:

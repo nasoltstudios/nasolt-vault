@@ -23,6 +23,7 @@ data/
 **/nasolt_vault.log
 *.csv
 *.nve
+*.nsv
 nasolt_vault_export_*.json
 .env
 .env.*
@@ -43,3 +44,4 @@ SECURITY_AUDIT_PHASE_1*.md
 LICENSE_PROPOSAL_MIT.md
 tools/fetch_assets.py
 CHANGELOG.md
+nasolt_legacy_nsv_reference/

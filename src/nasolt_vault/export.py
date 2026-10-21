@@ -15,6 +15,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from argon2.low_level import Type, hash_secret_raw
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -26,6 +27,12 @@ CSV_FIELDNAMES = ["title", "username", "password", "url", "notes", "group", "cre
 FORMAT_TAG = "nasolt-vault-export"
 ENCRYPTED_MAGIC = b"NSLX\x01"
 MAX_ENCRYPTED_IMPORT_BYTES = 100 * 1024 * 1024
+LEGACY_MAGIC = b"NSXP"
+LEGACY_VERSION = 1
+LEGACY_SALT_SIZE = 32
+LEGACY_NONCE_SIZE = 12
+LEGACY_TAG_SIZE = 16
+LEGACY_HEADER_SIZE = len(LEGACY_MAGIC) + 1 + LEGACY_SALT_SIZE + LEGACY_NONCE_SIZE + LEGACY_TAG_SIZE
 
 # header aliases so CSVs from other managers import too
 _ALIASES = {
@@ -138,11 +145,70 @@ def _pick(row: Dict[str, Any], field: str) -> str:
     return ""
 
 
-def read_import_file(filepath: str, password: Optional[str] = None) -> List[Dict[str, str]]:
-    """Authenticate and parse NVE, or parse legacy CSV/JSON, into normalised rows."""
-    ext = os.path.splitext(filepath)[1].lower()
+def _read_legacy_nsv(blob: bytes, password: str) -> tuple[List[Dict[str, Any]], List[str]]:
+    """Read the original NSXP v1 envelope; never use its layout for new exports."""
+    if len(blob) < LEGACY_HEADER_SIZE + 1 or blob[:len(LEGACY_MAGIC)] != LEGACY_MAGIC:
+        raise ValueError("This is not a supported legacy Nasolt export, or the file is damaged.")
+    if blob[len(LEGACY_MAGIC)] != LEGACY_VERSION:
+        raise ValueError("This legacy Nasolt export version is not supported.")
+    if not password:
+        raise ValueError("Enter the password used when this export was created.")
+    offset = len(LEGACY_MAGIC) + 1
+    salt = blob[offset:offset + LEGACY_SALT_SIZE]
+    offset += LEGACY_SALT_SIZE
+    nonce = blob[offset:offset + LEGACY_NONCE_SIZE]
+    offset += LEGACY_NONCE_SIZE
+    tag = blob[offset:offset + LEGACY_TAG_SIZE]
+    ciphertext = blob[offset + LEGACY_TAG_SIZE:]
     try:
-        if ext == ".nve":
+        # NSXP stores the tag before ciphertext and authenticates no header/AAD.
+        key = hash_secret_raw(password.encode("utf-8"), salt, time_cost=3,
+                              memory_cost=65536, parallelism=4, hash_len=32, type=Type.ID)
+        clear = AESGCM(key).decrypt(nonce, ciphertext + tag, None)
+    except (InvalidTag, ValueError):
+        raise ValueError("Decryption failed. Check the export password or file integrity.") from None
+    try:
+        data = json.loads(clear.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("The authenticated legacy export content is damaged.") from None
+    if (not isinstance(data, dict) or data.get("format") != FORMAT_TAG
+            or type(data.get("version")) is not int or data["version"] != 3):
+        raise ValueError("The legacy export contains an unsupported data format.")
+    groups, entries = data.get("groups"), data.get("entries")
+    if (not isinstance(groups, list) or not all(isinstance(g, str) for g in groups)
+            or not isinstance(entries, list)):
+        raise ValueError("The legacy export contains invalid groups or entries.")
+    for row in entries:
+        if not isinstance(row, dict):
+            raise ValueError("The legacy export contains invalid entries.")
+        for field in CSV_FIELDNAMES:
+            if field in row and not isinstance(row[field], str):
+                raise ValueError("The legacy export contains invalid entry fields.")
+        if not isinstance(row.get("title"), str) or not row["title"].strip():
+            raise ValueError("The legacy export contains an entry without a title.")
+    return entries, groups
+
+
+class ImportRows(list):
+    """Normalised rows with optional names of empty legacy export groups."""
+
+    def __init__(self, rows: List[Dict[str, str]], group_names: List[str]):
+        super().__init__(rows)
+        self.group_names = group_names
+
+
+def read_import_file(filepath: str, password: Optional[str] = None) -> List[Dict[str, str]]:
+    """Authenticate encrypted exports or parse CSV/JSON into normalised rows."""
+    ext = os.path.splitext(filepath)[1].lower()
+    legacy_groups: List[str] = []
+    try:
+        if ext == ".nsv":
+            with open(filepath, "rb") as f:
+                blob = f.read(MAX_ENCRYPTED_IMPORT_BYTES + 1)
+            if len(blob) > MAX_ENCRYPTED_IMPORT_BYTES:
+                raise ValueError("The encrypted export is too large to import.")
+            raw, legacy_groups = _read_legacy_nsv(blob, password or "")
+        elif ext == ".nve":
             if not password:
                 raise ValueError("Enter the password used when this export was created.")
             with open(filepath, "rb") as f:
@@ -186,7 +252,7 @@ def read_import_file(filepath: str, password: Optional[str] = None) -> List[Dict
                     dialect = csv.excel
                 raw = [dict(r) for r in csv.DictReader(f, dialect=dialect)]
         else:
-            raise ValueError(f"Unsupported file type '{ext or '(none)'}'. Choose a .nve, .csv, or .json file.")
+            raise ValueError(f"Unsupported file type '{ext or '(none)'}'. Choose a .nsv, .nve, .csv, or .json file.")
     except UnicodeDecodeError:
         raise ValueError("The file is not valid UTF-8 text.")
     except json.JSONDecodeError as e:
@@ -194,12 +260,13 @@ def read_import_file(filepath: str, password: Optional[str] = None) -> List[Dict
 
     rows: List[Dict[str, str]] = []
     for r in raw:
-        row = {f: _pick(r, f).strip() if f != "password" else _pick(r, f) for f in _ALIASES}
-        if row["title"]:
+        row = {f: _pick(r, f) if ext == ".nsv" or f == "password" else _pick(r, f).strip()
+               for f in _ALIASES}
+        if row["title"].strip():
             rows.append(row)
-    if not rows:
+    if not rows and not (ext == ".nsv" and any(name.strip() for name in legacy_groups)):
         raise ValueError("No usable entries found — every entry needs at least a title.")
-    return rows
+    return ImportRows(rows, legacy_groups) if ext == ".nsv" else rows
 
 
 def import_entries(filepath: str, password: Optional[str] = None) -> List[Dict[str, str]]:  # backwards-compatible name
@@ -249,4 +316,9 @@ def merge_import(entries: List[Dict[str, Any]], groups: List[Dict[str, Any]], ro
                 fields[stamp] = row[stamp]
         entries.append(_default_entry(**fields))
         result.added += 1
+    for name in getattr(rows, "group_names", ()):
+        cleaned = name.strip()
+        if cleaned and cleaned.lower() not in by_name:
+            by_name[cleaned.lower()] = add_group(groups, cleaned)
+            result.groups_created += 1
     return result

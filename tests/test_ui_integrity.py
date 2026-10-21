@@ -51,7 +51,9 @@ class UiIntegrityTests(unittest.TestCase):
         shell.navigate("transfer")
         transfer = shell.pages["transfer"]
         transfer._rows = rows
-        with mock.patch.object(shell, "import_rows", return_value=None), \
+        from nasolt_vault.ui import transfer_page as transfer_module
+        with mock.patch.object(transfer_module, "confirm", return_value=True), \
+             mock.patch.object(shell, "import_rows", return_value=None), \
              mock.patch.object(shell, "notify") as notify:
             transfer._import()
         self.assertIs(transfer._rows, rows)
@@ -181,6 +183,35 @@ class UiIntegrityTests(unittest.TestCase):
             page._choose()
         self.assertEqual(page._rows[0]["password"], "fictional-entry-value")
         self.assertEqual(len(shell.entries), 1)
+
+    def test_legacy_nsv_requires_confirmation_and_imports_empty_groups(self):
+        from nasolt_vault.ui import transfer_page as transfer_module
+        from test_legacy_nsv import PASSWORD, fictional_payload, legacy_blob
+
+        shell = self.app.shell
+        shell.navigate("transfer")
+        page = shell.pages["transfer"]
+        path = Path(self.temp.name, "fictional-legacy.nsv")
+        path.write_bytes(legacy_blob(fictional_payload() | {"entries": [],
+                                                           "groups": ["Empty recovery route"]}))
+        vault_path = Path(self.temp.name, "vault.enc")
+        before = vault_path.read_bytes()
+        with mock.patch.object(transfer_module.filedialog, "askopenfilename", return_value=str(path)) as picker, \
+             mock.patch.object(transfer_module, "export_password_prompt", return_value=PASSWORD):
+            page._choose()
+        self.assertIn("*.nsv", str(picker.call_args.kwargs["filetypes"]))
+        self.assertEqual(len(page._rows), 0)
+        with mock.patch.object(transfer_module, "confirm", return_value=False) as confirmation, \
+             mock.patch.object(shell, "import_rows") as writer:
+            page._import()
+        confirmation.assert_called_once()
+        writer.assert_not_called()
+        self.assertEqual(vault_path.read_bytes(), before)
+        self.assertEqual(shell.groups, [])
+        with mock.patch.object(transfer_module, "confirm", return_value=True):
+            page._import()
+        self.assertEqual([g["name"] for g in shell.groups], ["Empty recovery route"])
+        self.assertIsNone(page._rows)
 
     def test_new_entry_shows_offline_account_icon_preview(self):
         from nasolt_vault import icons
