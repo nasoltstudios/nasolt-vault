@@ -224,7 +224,7 @@ Section "Uninstall"
   IfErrors uninstall_registration_conflict
   StrCmp $0 0 uninstall_registration_checked uninstall_registration_conflict
   uninstall_registration_conflict:
-    MessageBox MB_OK|MB_ICONSTOP "Uninstallation stopped because the program folder or HKCU uninstall registration could not be verified. No shortcuts, program files or vault data were removed." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "Uninstallation stopped because installation ownership or recovery state could not be verified. If setup was interrupted, rerun setup to complete recovery, then retry uninstall. No shortcuts, program files or vault data were removed." /SD IDOK
     Abort
   uninstall_registration_checked:
   ; Refuse uninstall before removing any files if a fixed-name shortcut is

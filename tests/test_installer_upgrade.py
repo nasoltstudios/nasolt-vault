@@ -208,6 +208,37 @@ class InstallerUpgradeTests(unittest.TestCase):
                 self.assertFalse((self.install_dir / upgrade.JOURNAL).exists())
                 self.assertFalse((self.install_dir / upgrade.COMMITTED_JOURNAL).exists())
 
+    def test_setup_recovery_clears_each_journal_before_uninstall(self):
+        programs = Path(self.temp.name) / "programs"
+        desktop = Path(self.temp.name) / "desktop"
+        programs.mkdir()
+        desktop.mkdir()
+        for state in ("pending", "committed", "restored"):
+            with self.subTest(state=state):
+                if self.install_dir.exists():
+                    shutil.rmtree(self.install_dir)
+                self._owned_upgrade()
+                sidecars = self._sidecars()
+                upgrade.install(self.install_dir, self.candidates)
+                if state == "committed":
+                    self._interrupt_cleanup_at(upgrade.COMMITTED_JOURNAL, 1,
+                                               lambda: upgrade.finalize(self.install_dir))
+                elif state == "restored":
+                    self._interrupt_cleanup_at(upgrade.RESTORED_JOURNAL, 1,
+                                               lambda: upgrade.rollback(self.install_dir))
+                with self.assertRaises(ownership.ShortcutConflict):
+                    ownership.manage("check-uninstall", self.install_dir, programs, desktop)
+                with self.assertRaises(ownership.ShortcutConflict):
+                    ownership.manage("uninstall", self.install_dir, programs, desktop)
+                # NSIS runs recover before its ownership and uninstall checks.
+                upgrade.recover(self.install_dir)
+                ownership.manage("check-uninstall", self.install_dir, programs, desktop)
+                ownership.manage("uninstall", self.install_dir, programs, desktop)
+                for name, content in sidecars.items():
+                    self.assertEqual((self.install_dir / "data" / name).read_bytes(), content)
+                self.assertFalse(any((self.install_dir / name).exists()
+                                     for name in ownership.RECOVERY_JOURNALS))
+
     def test_restored_upgrade_recovers_after_every_cleanup_step(self):
         for step in range(1, 7):
             with self.subTest(step=step):

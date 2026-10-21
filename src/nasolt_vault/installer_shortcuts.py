@@ -18,6 +18,9 @@ APP = "Nasolt Vault"
 EXE = "Nasolt Vault.exe"
 UNINSTALL = "Uninstall.exe"
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\NasoltVault"
+RECOVERY_JOURNALS = (".nasolt-install-transaction.json",
+                     ".nasolt-install-committed.json",
+                     ".nasolt-install-restored.json")
 
 
 class ShortcutConflict(Exception):
@@ -65,8 +68,8 @@ def _check_install_dir(install_dir: Path, *, uninstall: bool = False) -> None:
         return
     if not install_dir.is_dir():
         raise ShortcutConflict("Installation path is not a directory")
-    pending = install_dir / ".nasolt-install-transaction.json"
-    if pending.exists() or pending.is_symlink():
+    if any((install_dir / name).exists() or (install_dir / name).is_symlink()
+           for name in RECOVERY_JOURNALS):
         raise ShortcutConflict("An installer transaction must be recovered first")
     if not uninstall and not any(install_dir.iterdir()):
         return
@@ -188,10 +191,13 @@ def manage(mode: str, install_dir: Path, programs_dir: Path, desktop_dir: Path) 
     if mode in {"check-install-dir", "check-uninstall"}:
         _check_install_dir(install_dir, uninstall=mode == "check-uninstall")
         return
+    if mode == "uninstall":
+        _check_install_dir(install_dir, uninstall=True)
     links = _check(mode, install_dir, programs_dir, desktop_dir)
     if mode.startswith("check"):
         return
     if mode == "uninstall":
+        _check_install_dir(install_dir, uninstall=True)
         for link, target, present in links:
             if present:
                 # Link contents might have changed since the first check.

@@ -14,9 +14,7 @@ from . import installer_shortcuts as ownership
 EXE = ownership.EXE
 UNINSTALL = ownership.UNINSTALL
 MARKER = "installed.flag"
-JOURNAL = ".nasolt-install-transaction.json"
-COMMITTED_JOURNAL = ".nasolt-install-committed.json"
-RESTORED_JOURNAL = ".nasolt-install-restored.json"
+JOURNAL, COMMITTED_JOURNAL, RESTORED_JOURNAL = ownership.RECOVERY_JOURNALS
 STAGED = {EXE: ".nasolt-next-app.exe", UNINSTALL: ".nasolt-next-uninstall.exe",
           MARKER: ".nasolt-next-marker"}
 PREVIOUS = {EXE: ".nasolt-previous-app.exe", UNINSTALL: ".nasolt-previous-uninstall.exe"}
@@ -128,7 +126,7 @@ def _clear_recovery_files(folder: Path, data: dict, journal: str) -> None:
 
 
 def _recovery_journal(folder: Path) -> str | None:
-    found = [name for name in (JOURNAL, COMMITTED_JOURNAL, RESTORED_JOURNAL)
+    found = [name for name in ownership.RECOVERY_JOURNALS
              if (folder / name).exists() or (folder / name).is_symlink()]
     if len(found) > 1:
         raise UpgradeConflict("Conflicting installer recovery journals are present")
