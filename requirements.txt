@@ -1,5 +1,11 @@
 customtkinter==6.0.0
-Pillow==12.3.0
+Pillow==13.0.0
 cryptography==50.0.2
 argon2-cffi==25.1.0
 pyperclip==1.11.0
+# Resolve the runtime dependency graph to reviewed Windows versions.
+darkdetect==0.8.0
+packaging==26.3
+cffi==2.1.1
+argon2-cffi-bindings==26.1.0
+pycparser==3.11

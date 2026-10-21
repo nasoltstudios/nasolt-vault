@@ -14,7 +14,7 @@ import sys
 import tempfile
 import traceback
 
-REPORT = os.path.join(tempfile.gettempdir(), "nasolt_vault_selftest.txt")
+REPORT = os.environ.get("NASOLT_SELFTEST_REPORT") or os.path.join(tempfile.gettempdir(), "nasolt_vault_selftest.txt")
 
 THIRD_PARTY = ["tkinter", "_tkinter", "customtkinter", "darkdetect", "PIL", "PIL.ImageTk", "PIL._tkinter_finder",
                "cryptography", "cryptography.hazmat.primitives.ciphers.aead", "argon2", "argon2.low_level", "pyperclip"]

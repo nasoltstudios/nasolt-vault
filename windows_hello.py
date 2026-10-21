@@ -147,7 +147,7 @@ def availability(timeout: float = 5.0) -> str:
             finally:
                 _release(operation)
     except (OSError, ValueError, AttributeError) as exc:
-        logging.getLogger("nasolt.hello").warning("Windows Hello availability failed (%s)", exc)
+        logging.getLogger("nasolt.hello").warning("Windows Hello availability failed (%s)", type(exc).__name__)
         return "unavailable"
 
 
@@ -177,5 +177,5 @@ def verify(hwnd: int, *, timeout: float = 45.0, cancel: Event | None = None,
                 if prompt.value:
                     runtime.dll.WindowsDeleteString(prompt)
     except (OSError, ValueError, AttributeError) as exc:
-        logging.getLogger("nasolt.hello").warning("Windows Hello verification failed (%s)", exc)
+        logging.getLogger("nasolt.hello").warning("Windows Hello verification failed (%s)", type(exc).__name__)
         return "unavailable"

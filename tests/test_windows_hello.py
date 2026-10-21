@@ -83,6 +83,16 @@ class HelloEnrollmentTests(unittest.TestCase):
             self.assertNotEqual(windows_hello.availability(), "available")
             self.assertNotEqual(windows_hello.verify(123), "verified")
 
+    @unittest.skipUnless(os.name == "nt", "Windows Hello native API check")
+    def test_native_failure_log_does_not_include_exception_value(self):
+        if windows_hello.sys.getwindowsversion().build < 22000:
+            self.skipTest("Windows Hello integration requires Windows build 22000 or later")
+        with mock.patch.object(windows_hello, "_Runtime", side_effect=ValueError("synthetic-secret")), \
+             mock.patch.object(windows_hello.logging, "getLogger") as logger:
+            self.assertEqual(windows_hello.availability(), "unavailable")
+            self.assertEqual(windows_hello.verify(123), "unavailable")
+        self.assertNotIn("synthetic-secret", str(logger.mock_calls))
+
 
 if __name__ == "__main__":
     unittest.main()

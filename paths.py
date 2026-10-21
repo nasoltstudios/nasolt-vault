@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 
 FROZEN: bool = bool(getattr(sys, "frozen", False))
 APP_DIR: str = os.path.dirname(sys.executable) if FROZEN else os.path.dirname(os.path.abspath(__file__))
@@ -28,15 +29,20 @@ def resource_path(*parts: str) -> str:
 
 
 def _is_writable(folder: str) -> bool:
+    probe = None
     try:
         os.makedirs(folder, exist_ok=True)
-        probe = os.path.join(folder, ".write_test")
-        with open(probe, "w") as f:
-            f.write("")
-        os.remove(probe)
+        fd, probe = tempfile.mkstemp(prefix=".nasolt-write-test-", dir=folder)
+        os.close(fd)
         return True
     except OSError:
         return False
+    finally:
+        if probe is not None:
+            try:
+                os.unlink(probe)
+            except OSError:
+                pass
 
 
 def is_installed() -> bool:
