@@ -13,7 +13,7 @@ Nasolt Vault is a free, open-source password manager for Windows by Nasolt Studi
 - Create and unlock a vault with a master password; add, edit, search, group, and delete entries.
 - Generate passwords, estimate their strength, and copy them with optional timed clipboard clearing.
 - Lock the vault manually or after inactivity. Encrypted backups and explicit backup recovery help protect against interrupted or damaged saves.
-- Export and import entries and groups in password-protected `.nve` files. CSV and JSON are available as plaintext compatibility formats with an export warning.
+- Export and import entries and groups in password-protected `.nve` files. Original `.nsv` encrypted exports can also be imported with their export password. CSV and JSON are available as plaintext compatibility formats with an export warning.
 - Use offline account icons and a live icon preview when adding an entry.
 - Map recovery dependencies with **Lockout Lab**, an optional section described below.
 - Open **Vault Summon** after fresh master-password or enrolled Windows Hello session verification for compact search and timed clipboard copies.
@@ -70,7 +70,7 @@ Lockout Lab metadata is stored separately in encrypted `lockout_lab.enc` and req
 
 The existing `NSLT` vault format is version 1. Nasolt Vault derives a key from the master password with Argon2id and encrypts vault contents with AES-256-GCM. The app does not store the master password, and there is no password reset. Keep your master password and encrypted backups safe. Windows Hello only reauthenticates an already-unlocked session; it cannot decrypt a locked vault.
 
-Password-protected `.nve` exports use Argon2id and authenticated AES-256-GCM encryption with a separate export password. That password is required to import the file. `.nve` is an entry export, not a replacement for a full vault backup; it excludes Lockout Lab data, settings, and backup generations. Compatibility with encrypted exports from older, unidentified implementations has not been established.
+Password-protected `.nve` exports use Argon2id and authenticated AES-256-GCM encryption with a separate export password. Original `.nsv` exports using the verified `NSXP` version 1 envelope are supported for import only and also require their original export password. New encrypted exports remain `.nve`. Entry exports are not replacements for full vault backups; they exclude Lockout Lab data, settings, and backup generations. Other unidentified encrypted export formats remain unsupported.
 
 **CSV and JSON exports contain readable passwords.** Store them carefully and remove them when no longer needed. Clipboard clearing is best effort; other applications and clipboard history may retain copies. Local logs may contain paths or other diagnostic context; review them before sharing. App-instance locking coordinates cooperating copies of Nasolt Vault, but it cannot protect against malware, a compromised device, or external tools modifying files.
 
