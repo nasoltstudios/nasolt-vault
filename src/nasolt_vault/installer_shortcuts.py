@@ -5,6 +5,7 @@ inspection never launches a target.  Ambiguous links stop the operation.
 """
 from __future__ import annotations
 
+import ctypes
 import json
 import ntpath
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from ctypes import wintypes
 
 
 APP = "Nasolt Vault"
@@ -27,8 +29,27 @@ class ShortcutConflict(Exception):
     pass
 
 
+def _long_existing_path(path: str) -> str | None:
+    """Expand Windows 8.3 names without treating a foreign path as owned."""
+    if sys.platform != "win32" or not ntpath.isabs(path):
+        return None
+    get_long = ctypes.windll.kernel32.GetLongPathNameW
+    get_long.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+    get_long.restype = wintypes.DWORD
+    result = ctypes.create_unicode_buffer(32768)
+    length = get_long(path, result, len(result))
+    return ntpath.normcase(ntpath.normpath(result.value)) if 0 < length < len(result) else None
+
+
 def _same_path(left: str, right: str) -> bool:
-    return bool(left and right) and ntpath.normcase(ntpath.normpath(left)) == ntpath.normcase(ntpath.normpath(right))
+    if not left or not right:
+        return False
+    if ntpath.normcase(ntpath.normpath(left)) == ntpath.normcase(ntpath.normpath(right)):
+        return True
+    # Shell links can expand an existing 8.3 target while registry and NSIS
+    # still use its short spelling. Failed expansion remains a conflict.
+    long_left, long_right = _long_existing_path(left), _long_existing_path(right)
+    return bool(long_left and long_right and long_left == long_right)
 
 
 def _registered_install_dir() -> str | None:

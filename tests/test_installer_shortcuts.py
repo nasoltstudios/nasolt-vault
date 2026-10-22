@@ -1,9 +1,11 @@
 """Installer ownership tests use only synthetic links in temporary folders."""
 from __future__ import annotations
 
+import ctypes
 import sys
 import tempfile
 import unittest
+from ctypes import wintypes
 from pathlib import Path
 from unittest import mock
 
@@ -208,6 +210,22 @@ class ShortcutOwnershipTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "win32", "Windows Shell shortcut integration")
 class WindowsShortcutIntegrationTests(unittest.TestCase):
+    def test_short_path_alias_matches_only_the_same_existing_target(self):
+        with tempfile.TemporaryDirectory(prefix="nasolt_short_alias_") as folder:
+            target = Path(folder) / "Nasolt Vault.exe"
+            target.write_bytes(b"synthetic executable")
+            get_short = ctypes.windll.kernel32.GetShortPathNameW
+            get_short.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+            get_short.restype = wintypes.DWORD
+            result = ctypes.create_unicode_buffer(32768)
+            length = get_short(str(target), result, len(result))
+            if not 0 < length < len(result) or result.value.casefold() == str(target).casefold():
+                self.skipTest("This filesystem has no distinct 8.3 alias")
+            self.assertTrue(shortcuts._same_path(result.value, str(target)))
+            foreign = Path(folder) / "Unrelated.exe"
+            foreign.write_bytes(b"synthetic unrelated executable")
+            self.assertFalse(shortcuts._same_path(result.value, str(foreign)))
+
     def test_real_shell_link_creation_upgrade_and_uninstall(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_shell_links_") as folder:
             root = Path(folder)
