@@ -1,9 +1,11 @@
 """Installer ownership tests use only synthetic links in temporary folders."""
 from __future__ import annotations
 
+import ctypes
 import sys
 import tempfile
 import unittest
+from ctypes import wintypes
 from pathlib import Path
 from unittest import mock
 
@@ -25,6 +27,10 @@ class ShortcutOwnershipTests(unittest.TestCase):
         self.registry = mock.patch.object(shortcuts, "_registered_install_dir", return_value=str(self.install))
         self.registry.start()
         self.addCleanup(self.registry.stop)
+        self.uninstaller = mock.patch.object(shortcuts, "_registered_uninstaller",
+                                      return_value='"' + str(self.install / shortcuts.UNINSTALL) + '"')
+        self.uninstaller.start()
+        self.addCleanup(self.uninstaller.stop)
 
     def _link(self, name="main"):
         return shortcuts._links(self.install, self.programs, self.desktop)[name]
@@ -32,6 +38,10 @@ class ShortcutOwnershipTests(unittest.TestCase):
     def _details(self, target, *, arguments="", workdir="", icon="", hotkey=""):
         return {"target": str(target), "arguments": arguments, "workdir": workdir,
                 "icon": icon, "hotkey": hotkey}
+
+    def _complete_install(self):
+        (self.install / shortcuts.EXE).write_bytes(b"synthetic executable")
+        (self.install / shortcuts.UNINSTALL).write_bytes(b"synthetic uninstaller")
 
     def test_legacy_upgrade_accepts_original_target_and_default_attributes(self):
         link, target = self._link()
@@ -74,6 +84,7 @@ class ShortcutOwnershipTests(unittest.TestCase):
                 shortcuts.manage("check-main", self.install, self.programs, self.desktop)
 
     def test_uninstall_refuses_all_shortcut_deletion_if_one_is_foreign(self):
+        self._complete_install()
         main, main_target = self._link()
         remove, remove_target = self._link("uninstall")
         main.parent.mkdir()
@@ -88,6 +99,7 @@ class ShortcutOwnershipTests(unittest.TestCase):
         self.assertTrue(remove.exists())
 
     def test_uninstall_preserves_other_start_menu_content(self):
+        self._complete_install()
         main, main_target = self._link()
         remove, remove_target = self._link("uninstall")
         main.parent.mkdir()
@@ -114,18 +126,106 @@ class ShortcutOwnershipTests(unittest.TestCase):
             create.assert_not_called()
         self.assertEqual(link.read_text(), "personal desktop shortcut")
 
+    def test_install_dir_preflight_accepts_empty_folder_and_owned_upgrade(self):
+        (self.install / "installed.flag").unlink()
+        shortcuts.manage("check-install-dir", self.install, self.programs, self.desktop)
+        (self.install / "installed.flag").write_text("synthetic installer marker", encoding="utf-8")
+        (self.install / shortcuts.EXE).write_text("synthetic executable", encoding="utf-8")
+        (self.install / shortcuts.UNINSTALL).write_text("synthetic uninstaller", encoding="utf-8")
+        (self.install / "unrelated.txt").write_text("preserve me", encoding="utf-8")
+        shortcuts.manage("check-install-dir", self.install, self.programs, self.desktop)
+        self.assertEqual((self.install / "unrelated.txt").read_text(), "preserve me")
+
+    def test_install_dir_preflight_refuses_foreign_and_partial_folders(self):
+        (self.install / "installed.flag").unlink()
+        (self.install / "foreign.txt").write_text("personal content", encoding="utf-8")
+        with self.assertRaises(shortcuts.ShortcutConflict):
+            shortcuts.manage("check-install-dir", self.install, self.programs, self.desktop)
+        (self.install / "installed.flag").write_text("synthetic installer marker", encoding="utf-8")
+        with self.assertRaises(shortcuts.ShortcutConflict):
+            shortcuts.manage("check-install-dir", self.install, self.programs, self.desktop)
+        (self.install / shortcuts.EXE).write_text("synthetic executable", encoding="utf-8")
+        (self.install / shortcuts.UNINSTALL).write_text("synthetic uninstaller", encoding="utf-8")
+        with mock.patch.object(shortcuts, "_registered_install_dir", return_value=str(self.programs)):
+            with self.assertRaises(shortcuts.ShortcutConflict):
+                shortcuts.manage("check-install-dir", self.install, self.programs, self.desktop)
+        self.assertEqual((self.install / "foreign.txt").read_text(), "personal content")
+
+    def test_uninstall_preflight_requires_owned_registration(self):
+        (self.install / shortcuts.EXE).write_text("synthetic executable", encoding="utf-8")
+        (self.install / shortcuts.UNINSTALL).write_text("synthetic uninstaller", encoding="utf-8")
+        with mock.patch.object(shortcuts, "_registered_uninstaller", return_value=None):
+            with self.assertRaises(shortcuts.ShortcutConflict):
+                shortcuts.manage("check-uninstall", self.install, self.programs, self.desktop)
+        with mock.patch.object(shortcuts, "_registered_uninstaller", return_value='"' + str(self.install / shortcuts.UNINSTALL) + '"'):
+            shortcuts.manage("check-uninstall", self.install, self.programs, self.desktop)
+        with mock.patch.object(shortcuts, "_registered_uninstaller", return_value=str(self.programs / "foreign.exe")):
+            with self.assertRaises(shortcuts.ShortcutConflict):
+                shortcuts.manage("check-uninstall", self.install, self.programs, self.desktop)
+
+    def test_every_recovery_journal_blocks_uninstall_without_changes(self):
+        self._complete_install()
+        vault = self.install / "data" / "vault.enc"
+        vault.parent.mkdir()
+        vault.write_bytes(b"fictional encrypted vault")
+        links = shortcuts._links(self.install, self.programs, self.desktop)
+        for link, _ in links.values():
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.write_bytes(b"synthetic owned shortcut")
+        protected = [self.install / "installed.flag", self.install / shortcuts.EXE,
+                     self.install / shortcuts.UNINSTALL, vault,
+                     *(link for link, _ in links.values())]
+        original = {path: path.read_bytes() for path in protected}
+        for name in shortcuts.RECOVERY_JOURNALS:
+            with self.subTest(journal=name):
+                journal = self.install / name
+                journal.write_bytes(b"synthetic unresolved journal")
+                with mock.patch.object(shortcuts, "_link_details") as inspect_link:
+                    for mode in ("check-uninstall", "uninstall"):
+                        with self.assertRaises(shortcuts.ShortcutConflict):
+                            shortcuts.manage(mode, self.install, self.programs, self.desktop)
+                    inspect_link.assert_not_called()
+                self.assertEqual({path: path.read_bytes() for path in protected}, original)
+                self.assertEqual(journal.read_bytes(), b"synthetic unresolved journal")
+                journal.unlink()
+
     def test_nsi_checks_ownership_before_copy_and_uninstall_deletion(self):
         source = (Path(__file__).resolve().parents[1] / "packaging" / "windows" / "NasoltVault.nsi").read_text(encoding="utf-8")
         install = source.split('Section "${APPNAME} (required)" SecMain', 1)[1].split("SectionEnd", 1)[0]
         uninstall = source.split('Section "Uninstall"', 1)[1]
-        self.assertLess(install.index("--installer-shortcuts check-main"), install.index('File "installed.flag"'))
+        self.assertLess(install.index("--installer-upgrade recover"), install.index("--installer-shortcuts check-main"))
+        self.assertLess(install.index("--installer-shortcuts check-install-dir"), install.index("--installer-upgrade install"))
+        self.assertLess(install.index("--installer-upgrade install"), install.index('WriteRegStr   HKCU "Software\\NasoltVault"'))
+        self.assertLess(install.index("--installer-upgrade finalize"), install.index("--installer-shortcuts install-main"))
+        self.assertIn('File /oname=NasoltShortcutCheck.exe "artifacts\\dist\\${EXE}"', install)
+        self.assertNotIn('SetOutPath "$INSTDIR"', install)
+        self.assertIn("IfErrors main_copy_failed", install)
+        self.assertLess(uninstall.index("--installer-shortcuts check-uninstall"), uninstall.index("--installer-shortcuts uninstall"))
         self.assertLess(uninstall.index("--installer-shortcuts uninstall"), uninstall.index('Delete "$INSTDIR\\${EXE}"'))
+        self.assertLess(uninstall.index("shortcut_cleanup_failed:"), uninstall.index('Delete "$INSTDIR\\${EXE}"'))
+        self.assertLess(uninstall.index("--installer-shortcuts check-uninstall"), uninstall.index("DeleteRegValue HKCU"))
         self.assertNotIn("CreateShortcut", source)
         self.assertNotIn('Delete "$DESKTOP\\${APPNAME}.lnk"', source)
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows Shell shortcut integration")
 class WindowsShortcutIntegrationTests(unittest.TestCase):
+    def test_short_path_alias_matches_only_the_same_existing_target(self):
+        with tempfile.TemporaryDirectory(prefix="nasolt_short_alias_") as folder:
+            target = Path(folder) / "Nasolt Vault.exe"
+            target.write_bytes(b"synthetic executable")
+            get_short = ctypes.windll.kernel32.GetShortPathNameW
+            get_short.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+            get_short.restype = wintypes.DWORD
+            result = ctypes.create_unicode_buffer(32768)
+            length = get_short(str(target), result, len(result))
+            if not 0 < length < len(result) or result.value.casefold() == str(target).casefold():
+                self.skipTest("This filesystem has no distinct 8.3 alias")
+            self.assertTrue(shortcuts._same_path(result.value, str(target)))
+            foreign = Path(folder) / "Unrelated.exe"
+            foreign.write_bytes(b"synthetic unrelated executable")
+            self.assertFalse(shortcuts._same_path(result.value, str(foreign)))
+
     def test_real_shell_link_creation_upgrade_and_uninstall(self):
         with tempfile.TemporaryDirectory(prefix="nasolt_shell_links_") as folder:
             root = Path(folder)
@@ -133,7 +233,10 @@ class WindowsShortcutIntegrationTests(unittest.TestCase):
             for path in (install, programs, desktop):
                 path.mkdir()
             (install / "installed.flag").write_text("synthetic installer marker", encoding="utf-8")
-            with mock.patch.object(shortcuts, "_registered_install_dir", return_value=str(install)):
+            (install / shortcuts.EXE).write_bytes(b"synthetic executable")
+            (install / shortcuts.UNINSTALL).write_bytes(b"synthetic uninstaller")
+            with mock.patch.object(shortcuts, "_registered_install_dir", return_value=str(install)), \
+                 mock.patch.object(shortcuts, "_registered_uninstaller", return_value=str(install / shortcuts.UNINSTALL)):
                 shortcuts.manage("install-main", install, programs, desktop)
                 main, main_target = shortcuts._links(install, programs, desktop)["main"]
                 self.assertTrue(main.is_file())

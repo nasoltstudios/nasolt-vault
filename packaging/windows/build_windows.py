@@ -22,6 +22,9 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SOURCE = os.path.join(ROOT, "src")
 ASSETS = os.path.join(SOURCE, "nasolt_vault", "assets")
+NOTICES = os.path.join(ROOT, "LICENSES", "third_party")
+NOTICE_INDEX = os.path.join(ROOT, "docs", "THIRD_PARTY_NOTICES.md")
+PROJECT_LICENSE = os.path.join(ROOT, "LICENSES", "MIT.txt")
 OUTPUT = os.path.join(ROOT, "packaging", "windows", "artifacts")
 NAME = "Nasolt Vault"
 SEP = ";" if os.name == "nt" else ":"
@@ -87,6 +90,9 @@ def main() -> int:
         "--specpath", os.path.join(OUTPUT, "spec"),
         "--paths", SOURCE,
         "--add-data", f"{ASSETS}{SEP}nasolt_vault/assets",  # package icons and app icon pack
+        "--add-data", f"{NOTICES}{SEP}nasolt_vault/notices/licenses",
+        "--add-data", f"{NOTICE_INDEX}{SEP}nasolt_vault/notices",
+        "--add-data", f"{PROJECT_LICENSE}{SEP}nasolt_vault/notices",
         "--collect-all", "customtkinter",            # its themes / fonts
         "--hidden-import", "PIL._tkinter_finder",    # Pillow <-> Tk bridge (needed for the images)
         "--hidden-import", "argon2", "--hidden-import", "argon2.low_level",

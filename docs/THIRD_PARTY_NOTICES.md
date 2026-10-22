@@ -20,6 +20,10 @@ distributed package.
 | Package | Local version | License evidence in this tree |
 |---|---:|---|
 | CustomTkinter | 6.0.0 | `../LICENSES/third_party/customtkinter-6.0.0/LICENSE` (MIT, copyright 2023 Tom Schimansky) |
+| Roboto-Regular and Roboto-Medium fonts bundled by CustomTkinter | files in the 6.0.0 wheel | `../LICENSES/third_party/Roboto-fonts/` (font metadata: Copyright 2011 Google Inc.; Apache-2.0) |
+| CPython runtime | 3.12.3 | `../LICENSES/third_party/Python-3.12.3/LICENSE.txt` (PSF and included third-party notices from the local Python installation) |
+| Tcl runtime | 8.6.13 | `../LICENSES/third_party/Tcl-8.6.13/license.terms` (official Tcl source tag) |
+| Tk runtime | 8.6.13 | `../LICENSES/third_party/Tk-8.6/license.terms` (copied from the local Python installation) |
 | darkdetect | 0.8.0 | `../LICENSES/third_party/darkdetect-0.8.0/LICENSE` (BSD-3-Clause) |
 | Pillow | 13.0.0 | `../LICENSES/third_party/Pillow-13.0.0/LICENSE` (MIT-CMU) |
 | cryptography | 50.0.2 | `../LICENSES/third_party/cryptography-50.0.2/` (Apache-2.0 OR BSD-3-Clause) |
@@ -35,11 +39,15 @@ distributed package.
 | PyInstaller Community Hooks build dependency | 2026.9 | `../LICENSES/third_party/pyinstaller-hooks-contrib-2026.9/LICENSE` (GPL-2.0-or-later hooks; Apache-2.0 runtime hooks) |
 | pywin32-ctypes build dependency | 0.2.3 | `../LICENSES/third_party/pywin32-ctypes-0.2.3/LICENSE.txt` (BSD-3-Clause) |
 | setuptools build dependency | 84.2.1 | `../LICENSES/third_party/setuptools-84.2.1/LICENSE` (MIT; bundled vendor notices need binary review) |
+| NSIS installer and Modern UI 2 | 3.11 | `../LICENSES/third_party/NSIS-3.11/` (NSIS zlib/libpng terms, LZMA Common Public License 1.0, and Modern UI 2 notice) |
 
-Platform-specific dependencies can still differ on another system; their
-license texts must be checked against the actual build. Python, Tcl/Tk, native extension
-binaries, fonts, and any NSIS installer runtime need a full binary notice
-inventory before distributing a Windows installer or executable. The original
+The local Windows executable embeds this notice index, the MIT project license,
+and the listed third-party license texts under `nasolt_vault/notices/` in its
+PyInstaller archive. Its bundled self-test checks representative Python,
+Tcl/Tk and Roboto notices. The NSIS 3.11 license texts are retained alongside
+the source and embedded in the executable used by the installer. Platform-specific
+dependencies can differ on another build system; verify that build's actual
+inventory before distribution. The original
 project source and app icon are licensed under the `LICENSES/MIT.txt`; the
 Lucide/Feather artwork and dependencies retain the licenses above.
 

@@ -20,6 +20,11 @@ if "--installer-shortcuts" in sys.argv:  # no GUI or vault access
     index = sys.argv.index("--installer-shortcuts")
     sys.exit(_shortcuts(sys.argv[index + 1:]))
 
+if "--installer-upgrade" in sys.argv:  # installer file transaction; no vault access
+    from .installer_upgrade import cli as _upgrade
+    index = sys.argv.index("--installer-upgrade")
+    sys.exit(_upgrade(sys.argv[index + 1:]))
+
 import logging
 import os
 import time
